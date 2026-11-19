@@ -1,0 +1,13 @@
+.gradle
+build
+dist/*.jar
+dist/*.zip
+.idea/
+.project
+.settings/
+.classpath
+nbactions.xml
+nb-configuration.xml
+nbproject/
+*.classerror.log
+.DS_Store

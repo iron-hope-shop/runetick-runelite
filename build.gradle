@@ -1,0 +1,93 @@
+plugins {
+	id 'java'
+}
+
+repositories {
+	mavenLocal()
+	maven {
+		url = 'https://repo.runelite.net'
+		content {
+			includeGroupByRegex("net\\.runelite.*")
+		}
+	}
+	mavenCentral()
+}
+
+def runeLiteVersion = 'latest.release'
+def pluginMainClass = 'com.runetick.RuneTickPluginLauncher'
+
+dependencies {
+	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
+
+	compileOnly 'org.projectlombok:lombok:1.18.30'
+	annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+	testCompileOnly 'org.projectlombok:lombok:1.18.30'
+	testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+	testImplementation 'junit:junit:4.12'
+	testImplementation 'org.mockito:mockito-core:3.1.0'
+	testImplementation 'com.squareup.okhttp3:mockwebserver:3.14.9'
+	testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+	testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+}
+
+group = 'com.runetick'
+version = '0.4.17'
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.release.set(11)
+}
+
+jar {
+	archiveBaseName.set('runetick-plugin')
+	from('runelite-plugin.properties')
+	manifest {
+		attributes(
+			'Plugin-Version': version,
+			'Plugin-Id': 'runetick',
+			'Plugin-Provider': 'Runetick'
+		)
+	}
+}
+
+test {
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
+}
+
+// Sideload zip: jar + install instructions for end users.
+tasks.register('distZip', Zip) {
+	dependsOn jar, test
+	archiveBaseName.set('runetick-runelite')
+	archiveVersion.set(version)
+	destinationDirectory.set(layout.projectDirectory.dir('dist'))
+	from(jar.archiveFile) {
+		into '/'
+	}
+	from('dist/INSTALL.txt') {
+		into '/'
+	}
+	from('CHANGELOG.md') {
+		into '/'
+	}
+	doLast {
+		copy {
+			from jar.archiveFile
+			into layout.projectDirectory.dir('dist')
+		}
+	}
+}
+
+// Launches a full RuneLite client in developer mode with this plugin loaded.
+tasks.register('run', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = pluginMainClass
+
+	// RuneLite's developer-mode client refuses to start without assertions.
+	jvmArgs "-ea", "-XX:ErrorFile=/tmp/hs_err_runetick.log", "-Dfile.encoding=UTF-8"
+	args "--developer-mode", "--debug"
+}
