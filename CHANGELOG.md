@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Prepared for the RuneLite Plugin Hub: plugin files stay in the plugin directory, and anything that contacts Runetick is off until you opt in.
+- Session, cash, and the error log are read and written only through the RuneLite Filepath API.
 
 ## [0.4.16] — 2026-11-19
 

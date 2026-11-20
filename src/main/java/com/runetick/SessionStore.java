@@ -4,9 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Value;
@@ -59,19 +56,7 @@ public class SessionStore
 
 	public synchronized void save(Session session) throws IOException
 	{
-		Filepath file = files.file("session.json");
-		file.write(gson.toJson(session),
-			StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
-		try
-		{
-			Files.setPosixFilePermissions(
-				Filepath.Unchecked.getPath(file),
-				PosixFilePermissions.fromString("rw-------"));
-		}
-		catch (UnsupportedOperationException e)
-		{
-			// Windows keeps the file in the user profile directory.
-		}
+		files.file("session.json").write(gson.toJson(session));
 	}
 
 	public synchronized void clear() throws IOException

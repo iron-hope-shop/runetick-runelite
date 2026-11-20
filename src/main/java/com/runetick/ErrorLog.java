@@ -2,8 +2,8 @@ package com.runetick;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.Reader;
 import java.io.StringWriter;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -37,11 +37,30 @@ public class ErrorLog
 		try
 		{
 			Filepath file = files.file("error.log");
-			file.write(sw.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+			file.write(readText(file) + sw);
 		}
 		catch (IOException e)
 		{
 			log.warn("Unable to write error.log", e);
 		}
+	}
+
+	private static String readText(Filepath file) throws IOException
+	{
+		if (!file.exists())
+		{
+			return "";
+		}
+		StringBuilder prior = new StringBuilder();
+		char[] buf = new char[4096];
+		try (Reader reader = file.openReader())
+		{
+			int n;
+			while ((n = reader.read(buf)) >= 0)
+			{
+				prior.append(buf, 0, n);
+			}
+		}
+		return prior.toString();
 	}
 }

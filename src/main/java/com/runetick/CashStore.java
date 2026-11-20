@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.file.StandardOpenOption;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Data;
@@ -69,7 +68,6 @@ public class CashStore
 		s.setBankGp(Math.max(0, bankGp));
 		s.setBankSeen(bankSeen);
 		s.setSavedAt(System.currentTimeMillis());
-		files.file("cash.json").write(gson.toJson(s),
-			StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+		files.file("cash.json").write(gson.toJson(s));
 	}
 }
