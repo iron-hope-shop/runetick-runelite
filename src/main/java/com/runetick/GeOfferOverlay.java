@@ -182,6 +182,11 @@ public class GeOfferOverlay extends OverlayPanel
 		{
 			row("Potential", signed(each * afford), MUTED, each >= 0 ? GAIN : WARN);
 		}
+		Long alch = quote.getAlchBeatsSell();
+		if (alch != null && alch > 0)
+		{
+			row("Alch", "+" + PriceFormat.gpExact(alch) + " vs sell", MUTED, GAIN);
+		}
 		if (offer != null && offer.getTotalQuantity() > 0)
 		{
 			row("Filled", offer.getQuantitySold() + " / " + offer.getTotalQuantity(), MUTED, MUTED);

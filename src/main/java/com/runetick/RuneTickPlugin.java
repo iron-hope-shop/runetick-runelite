@@ -1,6 +1,7 @@
 package com.runetick;
 
 import com.google.inject.Binder;
+import com.google.inject.Injector;
 import com.google.inject.Provides;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.Method;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,7 @@ import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.InventoryID;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.MenuAction;
 import net.runelite.api.events.GameStateChanged;
@@ -74,6 +77,9 @@ public class RuneTickPlugin extends Plugin
 
 	@Inject
 	private ClientToolbar clientToolbar;
+
+	@Inject
+	private Injector injector;
 
 	@Inject
 	private OverlayManager overlayManager;
@@ -169,7 +175,7 @@ public class RuneTickPlugin extends Plugin
 		tracker.reset();
 
 		panel = new RuneTickPanel(
-			this::connect, this::disconnect, this::openSite, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
+			this::connect, this::disconnect, this::openSite, this::openConfig, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
 		navButton = NavigationButton.builder()
 			.tooltip("Runetick")
 			.icon(RuneTickPanel.icon())
@@ -1115,6 +1121,13 @@ public class RuneTickPlugin extends Plugin
 				if (netWorthTickCounter >= NET_WORTH_REVALUE_TICKS)
 				{
 					netWorthTickCounter = 0;
+					inventoryHoldings.refresh(client.getItemContainer(InventoryID.INVENTORY));
+					ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+					if (bank != null)
+					{
+						cashTracker.refreshBank();
+						bankHoldings.refresh(bank);
+					}
 					revalueNetWorthAndPublish();
 				}
 				else
@@ -1330,6 +1343,26 @@ public class RuneTickPlugin extends Plugin
 		{
 			log.error("Error handling Grand Exchange offer update", t);
 		}
+	}
+
+	private void openConfig()
+	{
+		SwingUtilities.invokeLater(() ->
+		{
+			try
+			{
+				Class<?> type = Class.forName("net.runelite.client.plugins.config.PluginListPanel");
+				Object list = injector.getInstance(type);
+				Method open = type.getDeclaredMethod("openConfigurationPanel", Plugin.class);
+				open.setAccessible(true);
+				open.invoke(list, this);
+			}
+			catch (Throwable t)
+			{
+				log.error("Could not open Runetick settings", t);
+				panel.showMessage("Open the plugin list, then the wrench on RuneTick.");
+			}
+		});
 	}
 
 	private void syncOffer(OfferEvent offerEvent, String itemName)

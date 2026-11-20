@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Sidebar wealth is the full stack (coins, items, and open offers), and it keeps the last coin total if the bag is unreadable for a tick. Session starts after the bank has been opened once.
+- The sidebar lists open flips and recent fills, and Settings opens this plugin's RuneLite config.
+- The Grand Exchange tip and the search card say Alch only when high alchemy beats the taxed sell, after one nature rune.
 - Exceptions go to the RuneLite client log. The separate error.log file is gone.
 - Settings no longer repeat the install warning. Sending offers, history, cash, and item lookups is covered once, at install.
 - The sidebar is a shorter list: gold and session on one line, item rows without boxes.
