@@ -22,7 +22,6 @@ public class OfferGuard
 {
 	private final RuneTickApi api;
 	private final RuneTickConfig config;
-	private final ErrorLog errorLog;
 
 	/** slot -> last fired alert fingerprint still active. */
 	private final Map<Integer, String> fired = new ConcurrentHashMap<>();
@@ -33,11 +32,10 @@ public class OfferGuard
 	private volatile List<LiveRow> liveRows = Collections.emptyList();
 
 	@Inject
-	public OfferGuard(RuneTickApi api, RuneTickConfig config, ErrorLog errorLog)
+	public OfferGuard(RuneTickApi api, RuneTickConfig config)
 	{
 		this.api = api;
 		this.config = config;
-		this.errorLog = errorLog;
 	}
 
 	public List<LiveRow> getLiveRows()
@@ -102,7 +100,7 @@ public class OfferGuard
 			}
 			catch (Throwable t)
 			{
-				errorLog.log("OfferGuard quote failed for item " + itemId, t);
+				log.error("OfferGuard quote failed for item " + itemId, t);
 			}
 		}
 		volumes.keySet().removeIf(id -> !needed.contains(id));
@@ -153,7 +151,7 @@ public class OfferGuard
 						}
 						catch (Throwable t)
 						{
-							errorLog.log("OfferGuard notify failed", t);
+							log.error("OfferGuard notify failed", t);
 						}
 					}
 				}

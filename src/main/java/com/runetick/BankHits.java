@@ -50,7 +50,7 @@ final class BankHits
 				hits.add(new Hit(
 					f.getId(),
 					f.getName(),
-					"fat buy " + PriceFormat.gp(f.getBid()) + " -> sell " + PriceFormat.gp(f.getAsk()),
+					"buy " + PriceFormat.gp(f.getBid()) + " -> sell " + PriceFormat.gp(f.getAsk()),
 					"have " + q + " | profit " + PriceFormat.gp(f.getDreamGp()),
 					f.getDreamGp()));
 			}

@@ -33,7 +33,7 @@ dependencies {
 }
 
 group = 'com.runetick'
-version = '0.4.17'
+version = '0.4.22'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'

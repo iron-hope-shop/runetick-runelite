@@ -8,7 +8,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
-import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
@@ -16,6 +15,7 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -26,12 +26,18 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.util.AsyncBufferedImage;
 
 /**
  * Sidebar cockpit: compact wealth tiles + card rows (width-capped — no horizontal overflow).
@@ -39,11 +45,15 @@ import net.runelite.client.ui.PluginPanel;
  */
 public class RuneTickPanel extends PluginPanel
 {
-	private static final Color ACCENT = new Color(0x00, 0xc8, 0x05);
-	private static final Color CARD = new Color(0x2a, 0x2a, 0x2a);
-	private static final Color CARD_LINE = new Color(0x3a, 0x3a, 0x3a);
-	private static final Color MUTED = ColorScheme.LIGHT_GRAY_COLOR;
+	private static final Color BG = new Color(0x0b, 0x0b, 0x0c);
+	private static final Color CARD = new Color(0x11, 0x11, 0x13);
+	private static final Color CARD_LINE = new Color(0x27, 0x27, 0x2a);
+	private static final Color INK = new Color(0xf4, 0xf4, 0xf5);
+	private static final Color GAIN = new Color(0x4a, 0xde, 0x80);
+	private static final Color LOSS = new Color(0xef, 0x44, 0x44);
+	private static final Color MUTED = new Color(0x8b, 0x8b, 0x94);
 
+	private final JLabel title = plain(FontManager.getRunescapeBoldFont(), Accent.color());
 	private final JLabel status = plain(FontManager.getRunescapeBoldFont(), Color.WHITE);
 	private final JLabel sync = plain(FontManager.getRunescapeSmallFont(), MUTED);
 	private final JLabel detail = plain(FontManager.getRunescapeSmallFont(), MUTED);
@@ -51,6 +61,9 @@ public class RuneTickPanel extends PluginPanel
 	private final JLabel kpiNet = kpiValue();
 	private final JLabel kpiSession = kpiValue();
 	private final JLabel kpiMeta = plain(FontManager.getRunescapeSmallFont(), MUTED);
+	private final JPanel searchHost = boardHost();
+	private final JPanel itemHost = boardHost();
+	private final JLabel searchLabel = section("SEARCH");
 	private final JPanel bankHost = boardHost();
 	private final JPanel liveHost = boardHost();
 	private final JPanel fatHost = boardHost();
@@ -66,16 +79,31 @@ public class RuneTickPanel extends PluginPanel
 	private final Runnable onDisconnect;
 	private final Runnable onOpenSite;
 	private final IntConsumer onOpenItem;
+	private final Consumer<String> onSearch;
+	private final IntConsumer onInspect;
+	private final ItemManager itemManager;
 
-	public RuneTickPanel(Runnable onConnect, Runnable onDisconnect, Runnable onOpenSite, IntConsumer onOpenItem)
+	public RuneTickPanel(
+		Runnable onConnect,
+		Runnable onDisconnect,
+		Runnable onOpenSite,
+		IntConsumer onOpenItem,
+		Consumer<String> onSearch,
+		IntConsumer onInspect,
+		ItemManager itemManager)
 	{
 		this.onConnect = onConnect;
 		this.onDisconnect = onDisconnect;
 		this.onOpenSite = onOpenSite;
 		this.onOpenItem = onOpenItem == null ? id -> { } : onOpenItem;
+		this.onSearch = onSearch == null ? q -> { } : onSearch;
+		this.onInspect = onInspect == null ? id -> { } : onInspect;
+		this.itemManager = itemManager;
 
 		setLayout(new BorderLayout());
-		setBorder(new EmptyBorder(6, 6, 6, 6));
+		setBorder(new EmptyBorder(8, 8, 8, 8));
+		setBackground(BG);
+		setOpaque(true);
 		addComponentListener(new ComponentAdapter()
 		{
 			@Override
@@ -86,11 +114,11 @@ public class RuneTickPanel extends PluginPanel
 			}
 		});
 
-		JLabel title = plain(FontManager.getRunescapeBoldFont(), Color.WHITE);
 		title.setText("Runetick");
+		title.setForeground(Accent.color());
 
-		connectBtn.setFocusPainted(false);
-		connectBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		flat(connectBtn);
+		connectBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		connectBtn.addActionListener(e ->
 		{
 			try
@@ -103,8 +131,8 @@ public class RuneTickPanel extends PluginPanel
 			}
 		});
 
-		siteBtn.setFocusPainted(false);
-		siteBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		flat(siteBtn);
+		siteBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		siteBtn.addActionListener(e ->
 		{
 			try
@@ -131,19 +159,71 @@ public class RuneTickPanel extends PluginPanel
 		col.setAlignmentX(Component.LEFT_ALIGNMENT);
 		capColumnWidth();
 
+		status.setFont(FontManager.getRunescapeSmallFont());
 		stretch(title);
 		stretch(status);
 		stretch(sync);
 		stretch(detail);
 		stretch(kpiMeta);
 
-		col.add(title);
-		col.add(Box.createVerticalStrut(4));
+		JPanel head = new JPanel(new BorderLayout(8, 0));
+		head.setOpaque(false);
+		head.setAlignmentX(Component.LEFT_ALIGNMENT);
+		head.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+		head.add(title, BorderLayout.WEST);
+		head.add(status, BorderLayout.EAST);
+
+		col.add(head);
+		col.add(Box.createVerticalStrut(6));
 		col.add(actions);
 		col.add(Box.createVerticalStrut(6));
 		col.add(status);
 		col.add(sync);
 		col.add(detail);
+		JTextField search = new JTextField();
+		search.setFont(FontManager.getRunescapeSmallFont());
+		search.setForeground(Color.WHITE);
+		search.setBackground(CARD);
+		search.setCaretColor(Color.WHITE);
+		search.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CARD_LINE),
+			new EmptyBorder(4, 6, 4, 6)));
+		search.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		search.setAlignmentX(Component.LEFT_ALIGNMENT);
+		search.setToolTipText("Find an item. Click a result to see buy, sell, and profit here.");
+		Timer searchTimer = new Timer(250, e -> onSearch.accept(search.getText()));
+		searchTimer.setRepeats(false);
+		search.getDocument().addDocumentListener(new DocumentListener()
+		{
+			@Override
+			public void insertUpdate(DocumentEvent e)
+			{
+				searchTimer.restart();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e)
+			{
+				searchTimer.restart();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e)
+			{
+				searchTimer.restart();
+			}
+		});
+
+		searchLabel.setVisible(false);
+		searchHost.setVisible(false);
+		itemHost.setVisible(false);
+
+		col.add(Box.createVerticalStrut(8));
+		col.add(search);
+		col.add(Box.createVerticalStrut(4));
+		col.add(searchLabel);
+		col.add(searchHost);
+		col.add(itemHost);
 		col.add(Box.createVerticalStrut(8));
 		col.add(section("WEALTH"));
 		col.add(wealth);
@@ -153,23 +233,11 @@ public class RuneTickPanel extends PluginPanel
 		col.add(section("LIVE GE"));
 		col.add(liveHost);
 		col.add(Box.createVerticalStrut(8));
-		col.add(section("FAT"));
+		col.add(section("SELLS SOON"));
 		col.add(fatHost);
-		col.add(Box.createVerticalStrut(8));
-		col.add(section("FLIPS"));
-		col.add(flipHost);
-		col.add(Box.createVerticalStrut(8));
-		col.add(section("BANK HITS"));
-		col.add(bankHost);
-		col.add(Box.createVerticalStrut(8));
-		col.add(section("DIPS"));
-		col.add(dipHost);
-		col.add(Box.createVerticalStrut(8));
-		col.add(section("RECENT"));
-		col.add(histHost);
 		col.add(Box.createVerticalStrut(6));
-		JLabel hint = plain(FontManager.getRunescapeSmallFont(), ColorScheme.MEDIUM_GRAY_COLOR);
-		hint.setText(wrap("Click a card to open on Runetick. Open bank once to scan."));
+		JLabel hint = plain(FontManager.getRunescapeSmallFont(), MUTED);
+		hint.setText(wrap("Volume already traded in the last 15 minutes."));
 		stretch(hint);
 		col.add(hint);
 
@@ -178,7 +246,10 @@ public class RuneTickPanel extends PluginPanel
 		scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		scroll.getVerticalScrollBar().setUnitIncrement(16);
-		scroll.getViewport().setBackground(ColorScheme.DARK_GRAY_COLOR);
+		scroll.getViewport().setBackground(BG);
+		scroll.setBackground(BG);
+		col.setBackground(BG);
+		col.setOpaque(true);
 		add(scroll, BorderLayout.CENTER);
 
 		showState(false, "");
@@ -205,13 +276,12 @@ public class RuneTickPanel extends PluginPanel
 
 	private JPanel wealthStrip()
 	{
-		JPanel strip = new JPanel(new GridLayout(1, 3, 4, 0));
+		JPanel strip = new JPanel(new GridLayout(1, 2, 8, 0));
 		strip.setOpaque(false);
 		strip.setAlignmentX(Component.LEFT_ALIGNMENT);
-		strip.setMaximumSize(new Dimension(columnWidth(), 52));
-		strip.setPreferredSize(new Dimension(columnWidth(), 52));
-		strip.add(kpiTile("INV+GE", kpiInvGe));
-		strip.add(kpiTile("NET", kpiNet));
+		strip.setMaximumSize(new Dimension(columnWidth(), 40));
+		strip.setPreferredSize(new Dimension(columnWidth(), 40));
+		strip.add(kpiTile("GOLD", kpiInvGe));
 		strip.add(kpiTile("SESSION", kpiSession));
 		return strip;
 	}
@@ -220,17 +290,27 @@ public class RuneTickPanel extends PluginPanel
 	{
 		JPanel tile = new JPanel();
 		tile.setLayout(new BoxLayout(tile, BoxLayout.Y_AXIS));
-		tile.setBackground(CARD);
-		tile.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(CARD_LINE),
-			new EmptyBorder(4, 4, 4, 4)));
-		JLabel lab = plain(FontManager.getRunescapeSmallFont(), ColorScheme.BRAND_ORANGE);
+		tile.setOpaque(false);
+		tile.setBorder(new EmptyBorder(0, 0, 0, 0));
+		JLabel lab = plain(FontManager.getRunescapeSmallFont(), MUTED);
 		lab.setText(label);
 		lab.setAlignmentX(Component.LEFT_ALIGNMENT);
 		value.setAlignmentX(Component.LEFT_ALIGNMENT);
 		tile.add(lab);
 		tile.add(value);
 		return tile;
+	}
+
+	private static void flat(JButton button)
+	{
+		button.setFocusPainted(false);
+		button.setOpaque(true);
+		button.setBackground(CARD);
+		button.setForeground(INK);
+		button.setFont(FontManager.getRunescapeSmallFont());
+		button.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CARD_LINE),
+			new EmptyBorder(3, 8, 3, 8)));
 	}
 
 	private static JLabel kpiValue()
@@ -263,7 +343,7 @@ public class RuneTickPanel extends PluginPanel
 	{
 		capColumnWidth();
 		int w = columnWidth();
-		for (JPanel host : new JPanel[]{liveHost, bankHost, fatHost, dipHost, flipHost, histHost})
+		for (JPanel host : new JPanel[]{searchHost, itemHost, liveHost, bankHost, fatHost, dipHost, flipHost, histHost})
 		{
 			host.setMaximumSize(new Dimension(w, Integer.MAX_VALUE));
 			for (Component c : host.getComponents())
@@ -307,7 +387,7 @@ public class RuneTickPanel extends PluginPanel
 
 	private static JLabel section(String text)
 	{
-		JLabel l = plain(FontManager.getRunescapeSmallFont(), ColorScheme.BRAND_ORANGE);
+		JLabel l = plain(FontManager.getRunescapeSmallFont(), MUTED);
 		l.setText(text);
 		l.setAlignmentX(Component.LEFT_ALIGNMENT);
 		return l;
@@ -319,7 +399,8 @@ public class RuneTickPanel extends PluginPanel
 		{
 			linked = isLinked;
 			status.setText(isLinked ? "Connected" : "Not connected");
-			status.setForeground(isLinked ? ACCENT : MUTED);
+			title.setForeground(Accent.color());
+			status.setForeground(isLinked ? INK : MUTED);
 			connectBtn.setText(isLinked ? "Disconnect" : "Connect");
 			if (message != null && !message.isEmpty())
 			{
@@ -353,13 +434,14 @@ public class RuneTickPanel extends PluginPanel
 		{
 			linked = s.linked;
 			status.setText(s.linked ? (s.loggedIn ? "Connected · in game" : "Connected · log in") : "Not connected");
-			status.setForeground(s.linked ? ACCENT : MUTED);
+			title.setForeground(Accent.color());
+			status.setForeground(s.linked ? INK : MUTED);
 			connectBtn.setText(s.linked ? "Disconnect" : "Connect");
 
 			String syncLine;
 			if (!s.linked)
 			{
-				syncLine = "Sync off";
+				syncLine = "";
 			}
 			else if (!s.loggedIn)
 			{
@@ -375,20 +457,24 @@ public class RuneTickPanel extends PluginPanel
 			}
 			else
 			{
-				syncLine = "Sync waiting";
+				syncLine = "";
 			}
-			sync.setText(wrap(syncLine));
+			sync.setText(syncLine.isEmpty() ? " " : wrap(syncLine));
+			sync.setVisible(!syncLine.isEmpty());
 			fitWrapped(sync);
+
+			long spendable = s.inventoryGp + (s.bankSeen ? s.bankGp : 0);
+			kpiInvGe.setText(PriceFormat.gpCompact(spendable));
+			kpiInvGe.setForeground(INK);
 
 			if (s.showNetWorth && s.netWorth != null)
 			{
-				kpiInvGe.setText(PriceFormat.gpCompact(s.netWorth.invGeGp));
 				kpiNet.setText(PriceFormat.gpCompact(s.netWorth.totalGp));
 				if (s.netWorth.sessionArmed)
 				{
 					long d = s.netWorth.sessionDeltaGp;
 					kpiSession.setText((d > 0 ? "+" : "") + PriceFormat.gpCompact(d));
-					kpiSession.setForeground(d >= 0 ? ACCENT : new Color(0xff, 0x66, 0x66));
+					kpiSession.setForeground(d >= 0 ? GAIN : LOSS);
 				}
 				else
 				{
@@ -396,23 +482,20 @@ public class RuneTickPanel extends PluginPanel
 					kpiSession.setForeground(MUTED);
 				}
 				StringBuilder meta = new StringBuilder();
-				meta.append("Cash ").append(PriceFormat.gpCompact(s.inventoryGp));
-				if (s.bankSeen)
+				if (!s.bankSeen)
 				{
-					meta.append(" · bank ").append(PriceFormat.gpCompact(s.bankGp));
+					meta.append("Open the bank once for the full stack");
 				}
-				meta.append(" · bag ").append(PriceFormat.gpCompact(s.netWorth.invItemsGp));
-				meta.append(" · GE ").append(PriceFormat.gpCompact(s.netWorth.offersGp));
-				if (s.cashSavedAt > 0)
+				else
 				{
-					meta.append(" · ").append(ago(s.cashSavedAt));
+					meta.append("bag ").append(PriceFormat.gpCompact(s.netWorth.invItemsGp));
+					meta.append(" · GE ").append(PriceFormat.gpCompact(s.netWorth.offersGp));
 				}
 				kpiMeta.setText(wrap(meta.toString()));
 			}
 			else
 			{
-				kpiInvGe.setText(PriceFormat.gpCompact(s.inventoryGp));
-				kpiNet.setText(s.bankSeen ? PriceFormat.gpCompact(s.inventoryGp + s.bankGp) : "-");
+				kpiNet.setText(PriceFormat.gpCompact(spendable));
 				kpiSession.setText("-");
 				kpiSession.setForeground(MUTED);
 				kpiMeta.setText(wrap(s.bankSeen
@@ -430,7 +513,7 @@ public class RuneTickPanel extends PluginPanel
 				bankEmpty);
 			fillBoard(fatHost,
 				s.loadingBoard ? Collections.singletonList(BoardLine.of(0, "loading...", "", "")) : s.fatLines,
-				s.linked ? "none yet" : "connect first");
+				s.linked ? "Nothing sells in the next 15 minutes." : "connect first");
 			fillBoard(dipHost,
 				s.loadingBoard ? Collections.singletonList(BoardLine.of(0, "loading...", "", "")) : s.dipLines,
 				s.linked ? "none yet" : "connect first");
@@ -443,24 +526,71 @@ public class RuneTickPanel extends PluginPanel
 		});
 	}
 
+	void showSearch(List<BoardLine> lines, String empty)
+	{
+		boolean show = (lines != null && !lines.isEmpty()) || (empty != null && !empty.isEmpty());
+		searchLabel.setVisible(show);
+		searchHost.setVisible(show);
+		if (!show)
+		{
+			clearItem();
+		}
+		if (show)
+		{
+			fillBoard(searchHost, lines, empty, true);
+		}
+		reflowHosts();
+	}
+
+	void showItemPending()
+	{
+		itemHost.removeAll();
+		itemHost.setVisible(true);
+		JLabel loading = plain(FontManager.getRunescapeSmallFont(), MUTED);
+		loading.setText("Loading item…");
+		stretch(loading);
+		itemHost.add(loading);
+		itemHost.revalidate();
+		itemHost.repaint();
+		reflowHosts();
+	}
+
+	void showItem(RuneTickApi.ItemQuote quote)
+	{
+		itemHost.removeAll();
+		itemHost.setVisible(true);
+		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote));
+		itemHost.revalidate();
+		itemHost.repaint();
+		reflowHosts();
+	}
+
+	void clearItem()
+	{
+		itemHost.removeAll();
+		itemHost.setVisible(false);
+		itemHost.revalidate();
+	}
+
 	private void fillBoard(JPanel host, List<BoardLine> lines, String empty)
+	{
+		fillBoard(host, lines, empty, false);
+	}
+
+	private void fillBoard(JPanel host, List<BoardLine> lines, String empty, boolean inspect)
 	{
 		host.removeAll();
 		int w = columnWidth();
 		host.setMaximumSize(new Dimension(w, Integer.MAX_VALUE));
 		if (lines == null || lines.isEmpty())
 		{
-			JLabel emptyLbl = plain(FontManager.getRunescapeSmallFont(), MUTED);
-			emptyLbl.setText(wrap(empty));
-			stretch(emptyLbl);
-			fitWrapped(emptyLbl);
-			host.add(emptyLbl);
+			host.add(note(empty));
 		}
 		else
 		{
 			for (BoardLine line : lines)
 			{
-				host.add(rowCard(line));
+				host.add(rowCard(line, inspect));
 				host.add(Box.createVerticalStrut(4));
 			}
 		}
@@ -468,69 +598,66 @@ public class RuneTickPanel extends PluginPanel
 		host.repaint();
 	}
 
-	private JPanel rowCard(BoardLine line)
+	private JLabel note(String text)
+	{
+		JLabel label = plain(FontManager.getRunescapeSmallFont(), MUTED);
+		label.setText(wrap(text));
+		stretch(label);
+		fitWrapped(label);
+		return label;
+	}
+
+	private JPanel rowCard(BoardLine line, boolean inspect)
 	{
 		int w = columnWidth();
-		JPanel card = new JPanel();
-		card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-		card.setBackground(CARD);
+		JPanel card = new JPanel(new BorderLayout(6, 0));
+		card.setBackground(BG);
 		card.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(CARD_LINE),
-			new EmptyBorder(6, 7, 6, 7)));
+			BorderFactory.createMatteBorder(0, 0, 1, 0, CARD_LINE),
+			new EmptyBorder(4, 2, 4, 2)));
 		card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		int itemId = line == null ? 0 : line.itemId;
+		card.add(iconLabel(itemId), BorderLayout.WEST);
 
 		String name = line == null ? "?" : BoardRow.name(line.row);
 		String mid = line == null ? "" : BoardRow.mid(line.row);
 		String total = line == null ? "" : BoardRow.total(line.row);
 
-		JLabel nameLbl = plain(FontManager.getRunescapeBoldFont(), Color.WHITE);
+		JPanel text = new JPanel();
+		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		text.setOpaque(false);
+		JLabel nameLbl = plain(FontManager.getRunescapeBoldFont(), INK);
 		nameLbl.setText(wrap(name));
 		fitWrapped(nameLbl);
-
-		String foot = mid;
+		text.add(nameLbl);
+		if (!mid.isEmpty())
+		{
+			JLabel priceLbl = plain(FontManager.getRunescapeSmallFont(), INK);
+			priceLbl.setText(wrap(mid));
+			fitWrapped(priceLbl);
+			text.add(priceLbl);
+		}
 		if (!total.isEmpty())
 		{
-			foot = mid.isEmpty() ? total : mid + " · " + total;
+			JLabel extraLbl = plain(FontManager.getRunescapeSmallFont(), moneyColor(total));
+			extraLbl.setText(wrap(total));
+			fitWrapped(extraLbl);
+			text.add(extraLbl);
 		}
-		JLabel footLbl = plain(FontManager.getRunescapeSmallFont(), ACCENT);
-		footLbl.setForeground(MUTED);
-		footLbl.setText(wrap(foot));
-		fitWrapped(footLbl);
-		// Highlight the profit/ETA segment in green by keeping ACCENT on a separate short line when mid exists.
-		if (!mid.isEmpty() && !total.isEmpty())
-		{
-			footLbl.setText(wrap(mid));
-			fitWrapped(footLbl);
-			JLabel totalLbl = plain(FontManager.getRunescapeSmallFont(), ACCENT);
-			totalLbl.setText(wrap(total));
-			fitWrapped(totalLbl);
-			card.add(nameLbl);
-			card.add(Box.createVerticalStrut(2));
-			card.add(footLbl);
-			card.add(totalLbl);
-		}
-		else
-		{
-			card.add(nameLbl);
-			card.add(Box.createVerticalStrut(2));
-			card.add(footLbl);
-		}
+		card.add(text, BorderLayout.CENTER);
 
-		int h = 0;
-		for (Component c : card.getComponents())
-		{
-			h += Math.max(0, c.getPreferredSize().height);
-		}
-		h += 16;
-		card.setMaximumSize(new Dimension(w, Math.max(40, h)));
+		int h = Math.max(36, text.getPreferredSize().height + 12);
+		card.setMaximumSize(new Dimension(w, h));
+		card.setPreferredSize(new Dimension(w, h));
 
-		if (line != null && line.itemId > 0)
+		if (itemId > 0)
 		{
 			card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			card.setToolTipText("Open on Runetick");
+			card.setToolTipText(inspect ? "Show this item here" : "Open on Runetick");
 			JPopupMenu menu = new JPopupMenu();
 			JMenuItem open = new JMenuItem("Open on Runetick");
-			open.addActionListener(e -> openItem(line.itemId));
+			open.addActionListener(e -> openItem(itemId));
 			menu.add(open);
 			card.setComponentPopupMenu(menu);
 			MouseAdapter click = new MouseAdapter()
@@ -538,31 +665,148 @@ public class RuneTickPanel extends PluginPanel
 				@Override
 				public void mouseClicked(MouseEvent e)
 				{
-					if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1)
+					if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 1)
 					{
-						openItem(line.itemId);
+						return;
+					}
+					if (inspect)
+					{
+						onInspect.accept(itemId);
+					}
+					else
+					{
+						openItem(itemId);
 					}
 				}
 
 				@Override
 				public void mouseEntered(MouseEvent e)
 				{
-					card.setBackground(CARD_LINE);
+					card.setBackground(CARD);
 				}
 
 				@Override
 				public void mouseExited(MouseEvent e)
 				{
-					card.setBackground(CARD);
+					card.setBackground(BG);
 				}
 			};
-			card.addMouseListener(click);
-			for (Component c : card.getComponents())
-			{
-				c.addMouseListener(click);
-			}
+			wireClick(card, click);
 		}
 		return card;
+	}
+
+	private JPanel itemCard(RuneTickApi.ItemQuote quote)
+	{
+		int w = columnWidth();
+		JPanel card = new JPanel(new BorderLayout(6, 0));
+		card.setBackground(CARD);
+		card.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CARD_LINE),
+			new EmptyBorder(6, 6, 6, 6)));
+		card.setAlignmentX(Component.LEFT_ALIGNMENT);
+		card.add(iconLabel(quote.getId()), BorderLayout.WEST);
+
+		JPanel text = new JPanel();
+		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		text.setOpaque(false);
+		String name = quote.getName() == null || quote.getName().isEmpty() ? "Item" : quote.getName();
+		JLabel nameLbl = plain(FontManager.getRunescapeBoldFont(), INK);
+		nameLbl.setText(wrap(name));
+		fitWrapped(nameLbl);
+		text.add(nameLbl);
+		text.add(line("Buy", PriceFormat.gp(quote.getBuy()), INK));
+		text.add(line("Sell", PriceFormat.gp(quote.getSell()), INK));
+		long each = FocusCopy.eachProfit(quote.getBuy(), quote.getSell());
+		if (each != Long.MIN_VALUE)
+		{
+			String signed = (each > 0 ? "+" : "") + PriceFormat.gp(each);
+			text.add(line("Each", signed, each >= 0 ? GAIN : LOSS));
+		}
+		if (quote.getLimit() > 0)
+		{
+			text.add(line("Limit", PriceFormat.gp(quote.getLimit()), INK));
+		}
+		if (quote.getVolume() > 0)
+		{
+			text.add(line("Volume", PriceFormat.gp(quote.getVolume()), INK));
+		}
+		JButton open = new JButton("Open on site");
+		flat(open);
+		open.setAlignmentX(Component.LEFT_ALIGNMENT);
+		open.setMaximumSize(new Dimension(w, 24));
+		open.addActionListener(e -> openItem(quote.getId()));
+		text.add(Box.createVerticalStrut(4));
+		text.add(open);
+		card.add(text, BorderLayout.CENTER);
+
+		int h = Math.max(88, text.getPreferredSize().height + 16);
+		card.setMaximumSize(new Dimension(w, h));
+		card.setPreferredSize(new Dimension(w, h));
+		return card;
+	}
+
+	private JLabel line(String label, String value, Color valueColor)
+	{
+		JLabel row = plain(FontManager.getRunescapeSmallFont(), valueColor);
+		row.setText(wrap(label + "  " + value));
+		fitWrapped(row);
+		return row;
+	}
+
+	private JLabel iconLabel(int itemId)
+	{
+		JLabel icon = new JLabel();
+		icon.setPreferredSize(new Dimension(32, 32));
+		icon.setMinimumSize(new Dimension(32, 32));
+		icon.setVerticalAlignment(SwingConstants.TOP);
+		if (itemManager == null || itemId <= 0)
+		{
+			return icon;
+		}
+		try
+		{
+			AsyncBufferedImage image = itemManager.getImage(itemId);
+			if (image != null)
+			{
+				image.addTo(icon);
+			}
+		}
+		catch (Throwable ignored)
+		{
+			// A missing sprite should not blank the row.
+		}
+		return icon;
+	}
+
+	private static Color moneyColor(String text)
+	{
+		if (text == null || text.isEmpty())
+		{
+			return MUTED;
+		}
+		char c = text.charAt(0);
+		if (c == '+')
+		{
+			return GAIN;
+		}
+		if (c == '-' || c == '\u2212')
+		{
+			return LOSS;
+		}
+		return MUTED;
+	}
+
+	private static void wireClick(Component component, MouseAdapter click)
+	{
+		component.addMouseListener(click);
+		if (component instanceof java.awt.Container)
+		{
+			for (Component child : ((java.awt.Container) component).getComponents())
+			{
+				wireClick(child, click);
+			}
+		}
 	}
 
 	private void openItem(int itemId)
@@ -603,15 +847,25 @@ public class RuneTickPanel extends PluginPanel
 
 	static BufferedImage icon()
 	{
+		try (java.io.InputStream in = RuneTickPanel.class.getResourceAsStream("icon-16.png"))
+		{
+			if (in != null)
+			{
+				BufferedImage image = javax.imageio.ImageIO.read(in);
+				if (image != null)
+				{
+					return image;
+				}
+			}
+		}
+		catch (java.io.IOException e)
+		{
+			// Fall through to a plain tile if the icon file is missing.
+		}
 		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = image.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-		g.setColor(ACCENT);
-		g.fillRoundRect(0, 0, 16, 16, 5, 5);
-		g.setColor(Color.BLACK);
-		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-		g.drawString("R", 4, 13);
+		g.setColor(Accent.color());
+		g.fillRoundRect(0, 0, 16, 16, 4, 4);
 		g.dispose();
 		return image;
 	}

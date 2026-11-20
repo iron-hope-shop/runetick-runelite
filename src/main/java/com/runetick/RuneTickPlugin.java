@@ -112,7 +112,7 @@ public class RuneTickPlugin extends Plugin
 	private ItemTipOverlay itemTipOverlay;
 
 	@Inject
-	private ErrorLog errorLog;
+	private GeSlotOverlay geSlotOverlay;
 
 	@Inject
 	private PluginFiles pluginFiles;
@@ -168,7 +168,8 @@ public class RuneTickPlugin extends Plugin
 		pluginFiles.use(getPluginDirectory());
 		tracker.reset();
 
-		panel = new RuneTickPanel(this::connect, this::disconnect, this::openSite, this::openItemOnSite);
+		panel = new RuneTickPanel(
+			this::connect, this::disconnect, this::openSite, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
 		navButton = NavigationButton.builder()
 			.tooltip("Runetick")
 			.icon(RuneTickPanel.icon())
@@ -184,12 +185,13 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (Throwable t)
 			{
-				errorLog.log("Could not open the Runetick sidebar", t);
+				log.error("Could not open the Runetick sidebar", t);
 			}
 		});
 		overlayManager.add(overlay);
 		overlayManager.add(geOfferOverlay);
 		overlayManager.add(itemTipOverlay);
+		overlayManager.add(geSlotOverlay);
 
 		executor.submit(() ->
 		{
@@ -199,7 +201,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (IOException | RuntimeException e)
 			{
-				errorLog.log("Could not read Runetick sign-in", e);
+				log.error("Could not read Runetick sign-in", e);
 			}
 		});
 		refreshTask = executor.scheduleWithFixedDelay(
@@ -222,6 +224,7 @@ public class RuneTickPlugin extends Plugin
 		overlayManager.remove(overlay);
 		overlayManager.remove(geOfferOverlay);
 		overlayManager.remove(itemTipOverlay);
+		overlayManager.remove(geSlotOverlay);
 		if (refreshTask != null)
 		{
 			refreshTask.cancel(false);
@@ -283,40 +286,29 @@ public class RuneTickPlugin extends Plugin
 		}
 		long minDream = Math.max(0, config.minDreamProfitGp());
 		long minMargin = Math.max(0, config.minMarginPerUnit());
-		List<BoardLine> fatLines = new ArrayList<>();
-		FatStyle fatStyle = config.fatStyle() == null ? FatStyle.ALL : config.fatStyle();
-		if (config.showFatAndDips())
+		List<RuneTickApi.FatSpread> soon = new ArrayList<>();
+		for (RuneTickApi.FatSpread f : state.getFat())
 		{
-			for (RuneTickApi.FatSpread f : state.getFat())
+			if (SureSell.soonQty(f) > 0)
 			{
-				if (f == null)
-				{
-					continue;
-				}
-				if (!fatStyle.matches(f))
-				{
-					continue;
-				}
-				if (f.getDreamGp() < minDream || f.getMarginPerUnit() < minMargin)
-				{
-					continue;
-				}
-				if (fatLines.size() >= 8)
-				{
-					break;
-				}
-				int bankQty = config.scanBankItems() ? bankHoldings.qty(f.getId()) : 0;
-				String total = "profit " + PriceFormat.gp(f.getDreamGp());
-				if (bankQty > 0)
-				{
-					total = total + " | bank " + bankQty;
-				}
-				fatLines.add(BoardLine.of(
-					f.getId(),
-					f.getName(),
-					"buy " + PriceFormat.gp(f.getBid()) + " -> sell " + PriceFormat.gp(f.getAsk()),
-					total));
+				soon.add(f);
 			}
+		}
+		soon.sort((a, b) -> Long.compare(SureSell.soonProfit(b), SureSell.soonProfit(a)));
+		List<BoardLine> fatLines = new ArrayList<>();
+		for (RuneTickApi.FatSpread f : soon)
+		{
+			if (fatLines.size() >= 8)
+			{
+				break;
+			}
+			int qty = SureSell.soonQty(f);
+			int mins = SureSell.minutes(f);
+			fatLines.add(BoardLine.of(
+				f.getId(),
+				f.getName(),
+				"sell " + PriceFormat.gp(f.getAsk()),
+				"+" + PriceFormat.gp(f.getMarginPerUnit()) + " gp · " + PriceFormat.gp(qty) + " · ~" + mins + "m"));
 		}
 		List<BoardLine> dipLines = new ArrayList<>();
 		if (config.showFatAndDips())
@@ -334,6 +326,10 @@ public class RuneTickPlugin extends Plugin
 				long ask = FocusCopy.dipAsk(d.getPrice());
 				long margin = ask - d.getPrice();
 				if (margin < minMargin)
+				{
+					continue;
+				}
+				if (!BoardCuts.dip(d, config.hideCheap(), config.hideSlow()))
 				{
 					continue;
 				}
@@ -511,20 +507,98 @@ public class RuneTickPlugin extends Plugin
 						}
 						catch (Throwable t)
 						{
-							errorLog.log("OfferGuard poll failed", t);
+							log.error("OfferGuard poll failed", t);
 						}
 					});
 				}
 				catch (Throwable t)
 				{
-					errorLog.log("OfferGuard snapshot failed", t);
+					log.error("OfferGuard snapshot failed", t);
 				}
 			});
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("OfferGuard schedule failed", t);
+			log.error("OfferGuard schedule failed", t);
 		}
+	}
+
+	private final AtomicInteger searchGen = new AtomicInteger();
+	private final AtomicInteger inspectGen = new AtomicInteger();
+
+	private void searchItems(String raw)
+	{
+		String q = raw == null ? "" : raw.trim();
+		int gen = searchGen.incrementAndGet();
+		if (q.length() < 2)
+		{
+			SwingUtilities.invokeLater(() -> panel.showSearch(Collections.emptyList(), ""));
+			return;
+		}
+		executor.submit(() ->
+		{
+			try
+			{
+				List<BoardLine> lines = new ArrayList<>();
+				for (RuneTickApi.SearchHit hit : api.search(q))
+				{
+					if (hit == null || hit.getId() <= 0 || lines.size() >= 6)
+					{
+						continue;
+					}
+					String buy = hit.getBuy() > 0 ? PriceFormat.gp(hit.getBuy()) : "-";
+					String sell = hit.getSell() > 0 ? PriceFormat.gp(hit.getSell()) : "-";
+					long each = FocusCopy.eachProfit(hit.getBuy(), hit.getSell());
+					String profit = each == Long.MIN_VALUE
+						? ""
+						: ((each > 0 ? "+" : "") + PriceFormat.gp(each) + " each");
+					lines.add(BoardLine.of(hit.getId(), hit.getName(), "buy " + buy + "  sell " + sell, profit));
+				}
+				if (gen != searchGen.get())
+				{
+					return;
+				}
+				SwingUtilities.invokeLater(() -> panel.showSearch(lines, "No match"));
+			}
+			catch (Throwable t)
+			{
+				log.error("Item search failed", t);
+				if (gen == searchGen.get())
+				{
+					SwingUtilities.invokeLater(() -> panel.showSearch(Collections.emptyList(), "Search unavailable"));
+				}
+			}
+		});
+	}
+
+	private void inspectItem(int itemId)
+	{
+		if (itemId <= 0 || panel == null)
+		{
+			return;
+		}
+		int gen = inspectGen.incrementAndGet();
+		SwingUtilities.invokeLater(panel::showItemPending);
+		executor.submit(() ->
+		{
+			try
+			{
+				RuneTickApi.ItemQuote quote = api.getItem(itemId);
+				if (gen != inspectGen.get())
+				{
+					return;
+				}
+				SwingUtilities.invokeLater(() -> panel.showItem(quote));
+			}
+			catch (Throwable t)
+			{
+				log.error("Item detail failed", t);
+				if (gen == inspectGen.get())
+				{
+					SwingUtilities.invokeLater(() -> panel.showItem(null));
+				}
+			}
+		});
 	}
 
 	private void openSite()
@@ -610,7 +684,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (IOException | RuntimeException e)
 		{
-			errorLog.log("Could not refresh Runetick flips", e);
+			log.error("Could not refresh Runetick flips", e);
 			state.setNote("Could not load flips");
 		}
 		finally
@@ -632,6 +706,7 @@ public class RuneTickPlugin extends Plugin
 
 			state.setLoadingBoard(true);
 			RuneTickApi.Me me = api.getMe();
+			Accent.set(me.getAccent());
 			int slots = me.getSlots() > 0 ? me.getSlots() : 8;
 			// Fat dream stacks size from account capital (default 125m), not inv-only cash.
 			// Live bag cash alone was shrinking dreams after sync; bank-seen wealth can raise them.
@@ -677,7 +752,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (IOException | RuntimeException e)
 		{
-			errorLog.log("Could not refresh Runetick plan/signals", e);
+			log.error("Could not refresh Runetick plan/signals", e);
 			state.setNote("Could not load board");
 		}
 		finally
@@ -782,7 +857,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (Throwable t)
 			{
-				errorLog.log("Could not prepare GE history sync", t);
+				log.error("Could not prepare GE history sync", t);
 			}
 		});
 	}
@@ -906,7 +981,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (IOException | RuntimeException e)
 		{
-			errorLog.log("Could not sync GE history to Runetick", e);
+			log.error("Could not sync GE history to Runetick", e);
 			// HTTP 500 from GCS 429 comes through as sync_failed — back off hard either way.
 			nextSyncAllowedAt.set(System.currentTimeMillis() + SYNC_BACKOFF_MS);
 			state.setSyncStatus("could not sync");
@@ -989,7 +1064,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Could not load Runetick tip for item " + realId, t);
+			log.error("Could not load Runetick tip for item " + realId, t);
 		}
 	}
 
@@ -1019,7 +1094,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (Throwable t)
 			{
-				errorLog.log("Could not resolve GE item " + itemId, t);
+				log.error("Could not resolve GE item " + itemId, t);
 			}
 		});
 	}
@@ -1056,7 +1131,7 @@ public class RuneTickPlugin extends Plugin
 			{
 				return;
 			}
-			int itemId = client.getVarpValue(VarPlayer.CURRENT_GE_ITEM);
+			int itemId = GeView.tipItemId(client);
 			int previous = watchedGeItem.getAndSet(itemId);
 			if (itemId != previous)
 			{
@@ -1065,7 +1140,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Error on game tick", t);
+			log.error("Error on game tick", t);
 		}
 	}
 
@@ -1090,7 +1165,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Error reading cash containers", t);
+			log.error("Error reading cash containers", t);
 		}
 	}
 
@@ -1103,13 +1178,30 @@ public class RuneTickPlugin extends Plugin
 			{
 				return;
 			}
+			String option = event.getOption();
+			if (option == null)
+			{
+				return;
+			}
 			int itemId = event.getItemId();
+			if (itemId <= 0)
+			{
+				int slot = GeView.slotFromMenu(client, event.getActionParam1());
+				if (slot >= 0)
+				{
+					itemId = GeView.itemInSlot(client, slot);
+				}
+				else if (GeView.offerScreenOpen(client) && "Back".equals(option))
+				{
+					itemId = GeView.tipItemId(client);
+				}
+			}
 			if (itemId <= 0)
 			{
 				return;
 			}
-			// Attach once per menu when Examine appears (inv / bank / GE item menus).
-			if (!"Examine".equals(event.getOption()))
+			// One entry per menu: Examine on items, View/Abort on GE slots, Back on the offer page.
+			if (!"Examine".equals(option) && !"View offer".equals(option) && !"Abort offer".equals(option) && !"Back".equals(option))
 			{
 				return;
 			}
@@ -1122,7 +1214,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Error adding Runetick menu entry", t);
+			log.error("Error adding Runetick menu entry", t);
 		}
 	}
 
@@ -1132,16 +1224,16 @@ public class RuneTickPlugin extends Plugin
 		try
 		{
 			// GE offer create type changes (buy vs sell) — tip panel re-renders from state.
-			if (event.getVarpId() == VarPlayer.CURRENT_GE_ITEM)
+			if (event.getVarpId() == VarPlayer.CURRENT_GE_ITEM || event.getVarbitId() == net.runelite.api.gameval.VarbitID.GE_SELECTEDSLOT)
 			{
-				int itemId = event.getValue();
+				int itemId = GeView.tipItemId(client);
 				watchedGeItem.set(itemId);
 				queueGeItemRefresh(itemId);
 			}
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Error handling GE item change", t);
+			log.error("Error handling GE item change", t);
 		}
 	}
 
@@ -1236,7 +1328,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Error handling Grand Exchange offer update", t);
+			log.error("Error handling Grand Exchange offer update", t);
 		}
 	}
 
@@ -1266,7 +1358,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (IOException | RuntimeException e)
 		{
-			errorLog.log("Could not sync " + itemName + " offer to Runetick", e);
+			log.error("Could not sync " + itemName + " offer to Runetick", e);
 			panel.showMessage("Could not reach Runetick; see error.log");
 		}
 	}
@@ -1283,7 +1375,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (Throwable t)
 		{
-			errorLog.log("Desktop notify failed", t);
+			log.error("Desktop notify failed", t);
 		}
 	}
 
@@ -1315,7 +1407,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (IOException | RuntimeException e)
 			{
-				errorLog.log("Could not start Runetick connect", e);
+				log.error("Could not start Runetick connect", e);
 				panel.showMessage("Could not start connecting; see error.log");
 			}
 		});
@@ -1333,7 +1425,7 @@ public class RuneTickPlugin extends Plugin
 		}
 		catch (IOException | RuntimeException e)
 		{
-			errorLog.log("Runetick sign-in from browser did not work", e);
+			log.error("Runetick sign-in from browser did not work", e);
 			session.unlink();
 			state.setLinked(false);
 			panel.showState(false, "Sign-in did not work; try again");
@@ -1353,7 +1445,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			catch (IOException | RuntimeException e)
 			{
-				errorLog.log("Could not disconnect from Runetick", e);
+				log.error("Could not disconnect from Runetick", e);
 			}
 		});
 	}

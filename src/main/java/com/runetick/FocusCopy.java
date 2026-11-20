@@ -48,13 +48,28 @@ final class FocusCopy
 			+ PriceFormat.gp(d.getMedian30());
 	}
 
+	/** After-tax profit on one item. {@link Long#MIN_VALUE} when a price is missing. */
+	static long eachProfit(long buy, long sell)
+	{
+		if (buy <= 0 || sell <= 0)
+		{
+			return Long.MIN_VALUE;
+		}
+		long net = sell;
+		if (sell >= 50)
+		{
+			net = sell - Math.min(5_000_000L, sell * 2 / 100);
+		}
+		return net - buy;
+	}
+
 	static String fatWhy(RuneTickApi.FatSpread f)
 	{
 		if (f == null)
 		{
 			return "";
 		}
-		return PriceFormat.gp(f.getMarginPerUnit()) + "/ea | dream " + PriceFormat.gpCompact(f.getDreamGp());
+		return PriceFormat.gp(f.getMarginPerUnit()) + "/ea | full " + PriceFormat.gpCompact(f.getDreamGp());
 	}
 
 	static String fatPrices(RuneTickApi.FatSpread f)

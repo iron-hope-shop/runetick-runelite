@@ -344,7 +344,7 @@ public class RuneTickState
 		Map<Integer, String> out = new HashMap<>();
 		for (RuneTickApi.FatSpread f : fat)
 		{
-			out.put(f.getId(), "fat " + PriceFormat.gp(f.getBid()));
+			out.put(f.getId(), "margin " + PriceFormat.gp(f.getBid()));
 		}
 		for (RuneTickApi.Dip d : dips)
 		{

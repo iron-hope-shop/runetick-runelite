@@ -9,8 +9,6 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
-import net.runelite.api.VarPlayer;
-import net.runelite.api.Varbits;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.InterfaceID;
 import net.runelite.api.widgets.Widget;
@@ -25,12 +23,10 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
  */
 public class GeOfferOverlay extends OverlayPanel
 {
-	private static final Color BUY = new Color(0x4d, 0x9b, 0xff);
-	private static final Color SELL = new Color(0xff, 0xb0, 0x3a);
-	private static final Color GOOD = new Color(0x00, 0xc8, 0x05);
+	private static final Color INK = new Color(0xf4, 0xf4, 0xf5);
+	private static final Color GAIN = new Color(0x4a, 0xde, 0x80);
 	private static final Color MUTED = new Color(0xb0, 0xb0, 0xb0);
-	private static final Color WARN = new Color(0xff, 0x66, 0x66);
-	private static final Color TITLE = new Color(0xe8, 0xe8, 0xe8);
+	private static final Color WARN = new Color(0xef, 0x44, 0x44);
 
 	private final Client client;
 	private final RuneTickConfig config;
@@ -49,7 +45,7 @@ public class GeOfferOverlay extends OverlayPanel
 		setLayer(OverlayLayer.ALWAYS_ON_TOP);
 		setMovable(true);
 		setSnappable(true);
-		getPanelComponent().setPreferredSize(new Dimension(300, 0));
+		getPanelComponent().setPreferredSize(new Dimension(220, 0));
 		getPanelComponent().setBorder(new java.awt.Rectangle(4, 4, 4, 4));
 		getPanelComponent().setGap(new java.awt.Point(0, 2));
 	}
@@ -84,7 +80,7 @@ public class GeOfferOverlay extends OverlayPanel
 			return null;
 		}
 
-		int itemId = client.getVarpValue(VarPlayer.CURRENT_GE_ITEM);
+		int itemId = GeView.tipItemId(client);
 		return itemId <= 0 ? renderOverview(graphics) : renderItemTip(graphics, itemId);
 	}
 
@@ -108,12 +104,12 @@ public class GeOfferOverlay extends OverlayPanel
 	{
 		int free = countFreeSlots();
 		title("GE tip");
-		row("Slots", (8 - free) + " busy | " + free + " free", MUTED, GOOD);
+		row("Slots", (8 - free) + " busy | " + free + " free", MUTED, INK);
 
 		if (config.showCash())
 		{
 			String bank = state.isBankSeen() ? PriceFormat.gp(state.getBankGp()) : "-";
-			row("Cash", "inv " + PriceFormat.gp(state.getInventoryGp()) + " | bank " + bank, MUTED, GOOD);
+			row("Cash", "inv " + PriceFormat.gp(state.getInventoryGp()) + " | bank " + bank, MUTED, INK);
 		}
 
 		if (config.showFatAndDips())
@@ -122,15 +118,8 @@ public class GeOfferOverlay extends OverlayPanel
 			if (!fat.isEmpty())
 			{
 				RuneTickApi.FatSpread f = fat.get(0);
-				row("FAT", PriceFormat.abbreviate(f.getName(), 20), SELL, SELL);
-				row(FocusCopy.fatPrices(f), PriceFormat.gpCompact(f.getDreamGp()), BUY, GOOD);
-			}
-			List<RuneTickApi.Dip> dips = state.getDips();
-			if (!dips.isEmpty())
-			{
-				RuneTickApi.Dip d = dips.get(0);
-				row("DIP", PriceFormat.abbreviate(d.getName(), 18) + " " + FocusCopy.dipPct(d), BUY, BUY);
-				row(FocusCopy.dipPrices(d), "", GOOD, MUTED);
+				row("Margin", PriceFormat.abbreviate(f.getName(), 20), MUTED, INK);
+				row(FocusCopy.fatPrices(f), PriceFormat.gpCompact(f.getDreamGp()), INK, GAIN);
 			}
 		}
 
@@ -148,104 +137,113 @@ public class GeOfferOverlay extends OverlayPanel
 		}
 
 		int realId = state.getGeItemId() > 0 ? state.getGeItemId() : itemId;
-		boolean selling = client.getVarbitValue(Varbits.GE_OFFER_CREATION_TYPE) == 1;
-		RuneTickApi.PlacedFlip placed = state.placedFor(realId);
-		RuneTickApi.PlanPosition rec = state.recommendationFor(realId);
-		RuneTickApi.FatSpread fat = config.showFatAndDips() ? state.fatFor(realId) : null;
-		RuneTickApi.Dip dip = config.showFatAndDips() ? state.dipFor(realId) : null;
-
-		long recBuy;
-		long recSell;
-		String tag = selling ? "SELL" : "BUY";
-		if (placed != null)
+		GrandExchangeOffer offer = offerFor(realId);
+		long buy = quote.getBuy();
+		long sell = quote.getSell();
+		if (offer != null && offer.getPrice() > 0)
 		{
-			recBuy = placed.getBid();
-			recSell = placed.getAsk();
-			tag = "FLIP";
-		}
-		else if (fat != null)
-		{
-			recBuy = fat.getBid();
-			recSell = fat.getAsk();
-			tag = "FAT";
-		}
-		else if (dip != null)
-		{
-			recBuy = dip.getPrice();
-			recSell = FocusCopy.dipAsk(dip.getPrice());
-			tag = "DIP";
-		}
-		else if (rec != null)
-		{
-			recBuy = rec.getBid();
-			recSell = rec.getAsk();
-		}
-		else
-		{
-			recBuy = quote.getBuy();
-			recSell = quote.getSell();
+			if (buying(offer))
+			{
+				buy = offer.getPrice();
+			}
+			else
+			{
+				sell = offer.getPrice();
+			}
 		}
 
 		title(PriceFormat.abbreviate(quote.getName(), 28));
-		row(tag, selling ? "selling" : "buying", selling ? SELL : BUY, MUTED);
+		row("Buy", PriceFormat.gpExact(buy), MUTED, INK);
+		row("Sell", PriceFormat.gpExact(sell), MUTED, INK);
 
-		if (selling)
+		long each = FocusCopy.eachProfit(buy, sell);
+		if (each != Long.MIN_VALUE)
 		{
-			row("Sell at", PriceFormat.gpExact(recSell), SELL, SELL);
-			row("Mkt", PriceFormat.gpExact(quote.getSell()), MUTED, MUTED);
-			if (quote.getAfterTaxSell() > 0)
+			row("Each", signed(each), MUTED, each >= 0 ? GAIN : WARN);
+			int offerQty = offer != null ? offer.getTotalQuantity() : 0;
+			if (offerQty > 0)
 			{
-				row("After tax", PriceFormat.gpExact(quote.getAfterTaxSell()), MUTED, MUTED);
-			}
-			if (placed != null && placed.getBid() > 0)
-			{
-				long margin = quote.getAfterTaxSell() > 0
-					? quote.getAfterTaxSell() - placed.getBid()
-					: recSell - placed.getBid();
-				row("vs buy", (margin >= 0 ? "+" : "") + PriceFormat.gpExact(margin),
-					MUTED, margin >= 0 ? GOOD : WARN);
+				row("On offer", signed(each * offerQty), MUTED, each >= 0 ? GAIN : WARN);
 			}
 		}
-		else
-		{
-			row("Buy at", PriceFormat.gpExact(recBuy), BUY, BUY);
-			row("Then sell", PriceFormat.gpExact(recSell), SELL, SELL);
-			row("Mkt", PriceFormat.gp(quote.getBuy()) + " / " + PriceFormat.gp(quote.getSell()), MUTED, MUTED);
-			addAffordRows(recBuy > 0 ? recBuy : quote.getBuy(), quote.getLimit());
-		}
 
-		if (fat != null)
+		long cash = state.getInventoryGp() + (state.isBankSeen() ? state.getBankGp() : 0);
+		int limit = quote.getLimit();
+		long afford = Afford.units(cash, buy, limit);
+		String affordText = limit > 0
+			? PriceFormat.gp(afford) + " / " + PriceFormat.gp(limit)
+			: PriceFormat.gp(afford);
+		if (!state.isBankSeen())
 		{
-			row("Dream", PriceFormat.gpCompact(fat.getDreamGp()) + " | " + PriceFormat.gp(fat.getMarginPerUnit()) + "/ea",
-				MUTED, GOOD);
+			affordText = affordText + " inv";
 		}
-		else if (dip != null)
+		row("Afford", affordText, MUTED, INK);
+		if (each != Long.MIN_VALUE)
 		{
-			row("Dip", FocusCopy.dipPct(dip) + " | usual " + PriceFormat.gp(dip.getMedian30()), BUY, MUTED);
+			row("Potential", signed(each * afford), MUTED, each >= 0 ? GAIN : WARN);
 		}
-		else if (placed != null)
+		if (offer != null && offer.getTotalQuantity() > 0)
 		{
-			row("Progress", FocusCopy.flipLine(placed), MUTED, BUY);
-		}
-		else if (rec != null)
-		{
-			row("Plan", rec.getUnits() + " | " + PriceFormat.gpCompact(rec.getGpPerHour()) + "/h", MUTED, GOOD);
-		}
-
-		if (selling && quote.getLimit() > 0)
-		{
-			String market = "";
-			if (quote.getAnalytics() != null && quote.getAnalytics().getMarket() != null
-				&& quote.getAnalytics().getMarket().getLabel() != null)
-			{
-				market = quote.getAnalytics().getMarket().getLabel();
-			}
-			row("Limit " + PriceFormat.gp(quote.getLimit()), market, MUTED, MUTED);
+			row("Filled", offer.getQuantitySold() + " / " + offer.getTotalQuantity(), MUTED, MUTED);
 		}
 
 		addOfferEta(realId, quote);
 
 		return super.render(graphics);
+	}
+
+	private static String signed(long gp)
+	{
+		return (gp > 0 ? "+" : "") + PriceFormat.gpExact(gp);
+	}
+
+	private GrandExchangeOffer offerFor(int itemId)
+	{
+		GrandExchangeOffer selected = offerAt(GeView.selectedSlot(client));
+		if (selected != null && selected.getItemId() == itemId)
+		{
+			return selected;
+		}
+		GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null)
+		{
+			return null;
+		}
+		for (GrandExchangeOffer offer : offers)
+		{
+			if (offer != null && offer.getItemId() == itemId && offer.getState() != GrandExchangeOfferState.EMPTY)
+			{
+				return offer;
+			}
+		}
+		return null;
+	}
+
+	private GrandExchangeOffer offerAt(int slot)
+	{
+		if (slot < 0)
+		{
+			return null;
+		}
+		GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null || slot >= offers.length)
+		{
+			return null;
+		}
+		GrandExchangeOffer offer = offers[slot];
+		if (offer == null || offer.getState() == GrandExchangeOfferState.EMPTY || offer.getItemId() <= 0)
+		{
+			return null;
+		}
+		return offer;
+	}
+
+	private static boolean buying(GrandExchangeOffer offer)
+	{
+		GrandExchangeOfferState state = offer.getState();
+		return state == GrandExchangeOfferState.BUYING
+			|| state == GrandExchangeOfferState.BOUGHT
+			|| state == GrandExchangeOfferState.CANCELLED_BUY;
 	}
 
 	/** Show volume-based ETA when a matching open GE offer (or placed flip) has remaining qty. */
@@ -264,7 +262,7 @@ public class GeOfferOverlay extends OverlayPanel
 		String eta = OfferEta.format(remaining, vol);
 		if (!eta.isEmpty())
 		{
-			row("Est. fill", eta + (vol > 0 ? " · vol " + PriceFormat.gp(vol) + "/5m" : ""), MUTED, GOOD);
+			row("Est. fill", eta + (vol > 0 ? " · vol " + PriceFormat.gp(vol) + "/5m" : ""), MUTED, INK);
 		}
 	}
 
@@ -297,43 +295,11 @@ public class GeOfferOverlay extends OverlayPanel
 		return 0;
 	}
 
-	/** Units you can afford at the tip buy price from inv + last-known bank, vs GE limit. */
-	private void addAffordRows(long buyPrice, int limit)
-	{
-		long inv = state.getInventoryGp();
-		long bank = state.isBankSeen() ? state.getBankGp() : 0;
-		long cash = inv + bank;
-		long can = Afford.units(cash, buyPrice, limit);
-		long affordOnly = Afford.units(cash, buyPrice, 0);
-
-		String cashRight = state.isBankSeen()
-			? "inv " + PriceFormat.gpCompact(inv) + " + bank " + PriceFormat.gpCompact(bank)
-			: "inv " + PriceFormat.gpCompact(inv) + " (bank ?)";
-		row("Cash", cashRight, MUTED, GOOD);
-
-		if (buyPrice <= 0)
-		{
-			return;
-		}
-		if (limit > 0)
-		{
-			row("Can buy", PriceFormat.gp(can) + " / lim " + PriceFormat.gp(limit), BUY, MUTED);
-			if (affordOnly > limit)
-			{
-				row("Afford", PriceFormat.gp(affordOnly) + " (cash)", MUTED, MUTED);
-			}
-		}
-		else
-		{
-			row("Can buy", PriceFormat.gp(can) + " (cash)", BUY, GOOD);
-		}
-	}
-
 	private void title(String text)
 	{
 		panelComponent.getChildren().add(TitleComponent.builder()
 			.text(HudText.ascii(text))
-			.color(TITLE)
+			.color(Accent.color())
 			.build());
 	}
 

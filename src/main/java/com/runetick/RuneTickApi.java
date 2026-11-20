@@ -76,6 +76,8 @@ public class RuneTickApi
 		private long bankGp;
 		private boolean bankSeen;
 		private long geSyncedAt;
+		/** Site theme highlight, #rrggbb. */
+		private String accent;
 	}
 
 	/** Live Grand Exchange slot for POST /v1/me/sync. */
@@ -350,6 +352,45 @@ public class RuneTickApi
 		catch (JsonParseException e)
 		{
 			throw new IOException("Unreadable plan from Runetick", e);
+		}
+	}
+
+	@Data
+	public static class SearchHit
+	{
+		private int id;
+		private String name;
+		private long buy;
+		private long sell;
+	}
+
+	@Data
+	public static class SearchResult
+	{
+		private List<SearchHit> items = Collections.emptyList();
+	}
+
+	public List<SearchHit> search(String query) throws IOException
+	{
+		String q = query == null ? "" : query.trim();
+		if (q.isEmpty())
+		{
+			return Collections.emptyList();
+		}
+		String encoded = java.net.URLEncoder.encode(q, "UTF-8");
+		String body = send("GET", "v1/search?limit=6&q=" + encoded, null, false);
+		try
+		{
+			SearchResult result = gson.fromJson(body, SearchResult.class);
+			if (result == null || result.getItems() == null)
+			{
+				return Collections.emptyList();
+			}
+			return result.getItems();
+		}
+		catch (JsonParseException e)
+		{
+			throw new IOException("Unreadable search from Runetick", e);
 		}
 	}
 

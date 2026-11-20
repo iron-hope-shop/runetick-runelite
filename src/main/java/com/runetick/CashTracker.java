@@ -23,7 +23,6 @@ public class CashTracker
 
 	private final Client client;
 	private final CashStore store;
-	private final ErrorLog errorLog;
 
 	private volatile long inventoryGp;
 	private volatile long bankGp;
@@ -32,11 +31,10 @@ public class CashTracker
 	private volatile boolean dirty;
 
 	@Inject
-	public CashTracker(Client client, CashStore store, ErrorLog errorLog)
+	public CashTracker(Client client, CashStore store)
 	{
 		this.client = client;
 		this.store = store;
-		this.errorLog = errorLog;
 		restore();
 	}
 
@@ -132,7 +130,7 @@ public class CashTracker
 		}
 		catch (IOException e)
 		{
-			errorLog.log("Could not save last-known cash", e);
+			log.error("Could not save last-known cash", e);
 		}
 	}
 

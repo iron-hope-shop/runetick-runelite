@@ -7,6 +7,15 @@ import org.junit.Test;
 public class FocusCopyTest
 {
 	@Test
+	public void eachProfitIsAfterTax()
+	{
+		assertEquals(-3L, FocusCopy.eachProfit(543, 551));
+		assertEquals(176L, FocusCopy.eachProfit(1000, 1200));
+		assertEquals(10L, FocusCopy.eachProfit(10, 20));
+		assertEquals(Long.MIN_VALUE, FocusCopy.eachProfit(0, 551));
+	}
+
+	@Test
 	public void dipAskTargetsTwentyPercentAfterTax()
 	{
 		assertEquals(1224, FocusCopy.dipAsk(1000));
@@ -24,7 +33,7 @@ public class FocusCopyTest
 		fat.setDreamGp(47_000);
 		assertTrue(FocusCopy.fatPrices(fat).contains("1,000"));
 		assertTrue(FocusCopy.fatWhy(fat).contains("470"));
-		assertTrue(FocusCopy.fatWhy(fat).contains("dream"));
+		assertTrue(FocusCopy.fatWhy(fat).contains("full"));
 
 		RuneTickApi.Dip dip = new RuneTickApi.Dip();
 		dip.setPrice(650);

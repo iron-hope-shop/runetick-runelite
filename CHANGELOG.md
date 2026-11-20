@@ -5,9 +5,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Exceptions go to the RuneLite client log. The separate error.log file is gone.
+- Settings no longer repeat the install warning. Sending offers, history, cash, and item lookups is covered once, at install.
+- The sidebar is a shorter list: gold and session on one line, item rows without boxes.
+- The Grand Exchange tip shows how many you can afford and the profit on that quantity.
+- The sidebar uses the same dark rows as the site: item icons, white prices, green profit. Search opens the quote in the panel.
+- The Grand Exchange tip says Margin, and item tags say margin. The old fat label is gone.
+- The Grand Exchange overview no longer lists a dip or an alchemy line.
+- The sidebar lists sells the market already traded in the last 15 minutes, with the profit on that quantity. A search box opens the item on the site.
+- The sidebar icon is the flap R. Reprice is ±, because the price can move either way.
+- The GE tip is the item, its buy and sell, and the after-tax profit. The call legend sits under the Grand Exchange window. Opening an offer you already placed still shows that item.
+- Numbers and the Runetick title use the highlight color chosen under Account → Theme.
+- Sidebar and GE marks use the board colours. Calls are hold, reprice, and pull. The board section is labelled Margin, and the tip says full limit.
+
 ### Packaging
 - Hosted download: `https://runetick.ironhopeshop.com/runelite.jar` (also `/runelite` install page).
 - `./gradlew distZip` → `dist/runetick-runelite-*.zip` (plugin jar + INSTALL.txt). Sideload into `~/.runelite/sideloaded-plugins/`.
+
+## [0.4.21] — 2026-11-19
+
+### Changed
+- GE marks are a corner badge, not a bar. A legend sits at the top of the Grand Exchange: `-` hold, `^` raise, `v` lower, `x` out.
+
+## [0.4.20] — 2026-11-19
+
+### Changed
+- GE slot marks sit on the item icon: a color bar for buy or sell, and a glyph. `-` hold, `^` raise, `v` lower, `x` back out.
+
+## [0.4.19] — 2026-11-19
+
+### Added
+- Plugin settings **Hide cheap**, **Hide slow**, and **Best only** (on by default). Best means not under 10k, at least 20 clears an hour, and 5m dream profit.
+
+## [0.4.18] — 2026-11-19
+
+### Fixed
+- GE buy/sell page tip follows the offer you opened, not the previous search.
+
+### Added
+- Slot labels on the Grand Exchange (buy/sell price, or Raise / Lower / Back out).
+- Right-click **Runetick** on a GE slot, and on Back while an offer is open.
 
 ## [0.4.17] — 2026-11-19
 

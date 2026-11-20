@@ -16,7 +16,6 @@ public class OfferGuardTest
 {
 	private RuneTickApi api;
 	private RuneTickConfig config;
-	private ErrorLog errorLog;
 	private OfferGuard guard;
 
 	@Before
@@ -24,11 +23,10 @@ public class OfferGuardTest
 	{
 		api = mock(RuneTickApi.class);
 		config = mock(RuneTickConfig.class);
-		errorLog = mock(ErrorLog.class);
 		when(config.offerEta()).thenReturn(true);
 		when(config.offerPriceAlerts()).thenReturn(true);
 		when(config.desktopNotify()).thenReturn(true);
-		guard = new OfferGuard(api, config, errorLog);
+		guard = new OfferGuard(api, config);
 	}
 
 	@Test

@@ -11,48 +11,43 @@ public interface RuneTickConfig extends Config
 {
 	String GROUP = "runetick";
 	String DEFAULT_SITE_URL = "https://runetick.ironhopeshop.com";
-	String THIRD_PARTY = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers";
-
 	@ConfigItem(
 		keyName = "syncPlaced",
 		name = "Update placed flips",
 		description = "When a Grand Exchange offer matches a flip you placed in Runetick, update how many have bought and sold",
-		warning = THIRD_PARTY,
 		position = 1
 	)
 	default boolean syncPlaced()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "logTrades",
 		name = "Log other trades",
 		description = "Log finished Grand Exchange buys and sells that are not one of your placed flips to your Runetick trade log",
-		warning = THIRD_PARTY,
 		position = 2
 	)
 	default boolean logTrades()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "syncHistory",
 		name = "Sync GE history & cash",
 		description = "Upload GE history, live GE slots, cash, and net worth to the Runetick website",
-		warning = THIRD_PARTY,
 		position = 3
 	)
 	default boolean syncHistory()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "showStatusHud",
 		name = "Tiny status HUD",
-		description = "Optional 2-line on-screen chip. Fat/dips/flips/cash live in the sidebar panel; GE tips still show when you open an item",
+		description = "Optional 2-line on-screen chip. Margins, flips, and cash stay in the sidebar; GE tips still show when you open an item",
 		position = 4
 	)
 	default boolean showStatusHud()
@@ -64,12 +59,11 @@ public interface RuneTickConfig extends Config
 		keyName = "showGeTips",
 		name = "GE offer tips",
 		description = "When the Grand Exchange is open on an item, show recommended buy/sell vs market averages",
-		warning = THIRD_PARTY,
 		position = 5
 	)
 	default boolean showGeTips()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
@@ -97,7 +91,7 @@ public interface RuneTickConfig extends Config
 	@ConfigItem(
 		keyName = "scanBankItems",
 		name = "Scan bank for board hits",
-		description = "When you open the bank, match holdings against fat/dips/flips and show BANK HITS in the sidebar",
+		description = "When you open the bank, match holdings against the margins and show BANK HITS in the sidebar",
 		position = 8
 	)
 	default boolean scanBankItems()
@@ -107,20 +101,19 @@ public interface RuneTickConfig extends Config
 
 	@ConfigItem(
 		keyName = "showFatAndDips",
-		name = "Fat spreads & dips",
-		description = "Show wide after-tax gaps and monthly dips from Runetick",
-		warning = THIRD_PARTY,
+		name = "Margins",
+		description = "Show after-tax margins and items sitting below their usual price",
 		position = 9
 	)
 	default boolean showFatAndDips()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "fatStyle",
-		name = "Fat style",
-		description = "ALL = every fat row. BUSY = high volume / liquid. PRICEY = high ticket with thinner volume",
+		name = "Board",
+		description = "ALL = every row. BUSY = high volume. PRICEY = high ticket with thinner volume",
 		position = 10
 	)
 	default FatStyle fatStyle()
@@ -129,9 +122,42 @@ public interface RuneTickConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "hideCheap",
+		name = "Hide cheap items",
+		description = "Hide gaps and dips cheaper than 10,000 gp each",
+		position = 101
+	)
+	default boolean hideCheap()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "hideSlow",
+		name = "Hide slow items",
+		description = "Hide gaps under 20 clears an hour, and dips under 2,000 traded a day",
+		position = 102
+	)
+	default boolean hideSlow()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "bestOnly",
+		name = "Best only",
+		description = "Only items that are not cheap, not slow, and at least 5m full-limit profit",
+		position = 103
+	)
+	default boolean bestOnly()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "minDreamProfitGp",
-		name = "Min fat profit",
-		description = "Hide fat spreads whose dream-stack profit is below this",
+		name = "Min full-limit profit",
+		description = "Hide rows whose full-limit profit is below this",
 		position = 11
 	)
 	@Range(min = 0, max = 100_000_000)
@@ -144,7 +170,7 @@ public interface RuneTickConfig extends Config
 	@ConfigItem(
 		keyName = "minMarginPerUnit",
 		name = "Min margin / item",
-		description = "Hide fat/dip rows whose after-tax margin per item is below this",
+		description = "Hide rows whose after-tax margin per item is below this",
 		position = 12
 	)
 	@Range(min = 0, max = 1_000_000)
@@ -213,24 +239,22 @@ public interface RuneTickConfig extends Config
 		keyName = "offerEta",
 		name = "Offer fill ETA",
 		description = "Estimate sale/fill time from wiki 5m volume on live GE cards and GE tip",
-		warning = THIRD_PARTY,
 		position = 18
 	)
 	default boolean offerEta()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "offerPriceAlerts",
 		name = "Offer price alerts",
 		description = "Desktop notify when market moves ~2% against an open GE offer (deduped per slot)",
-		warning = THIRD_PARTY,
 		position = 19
 	)
 	default boolean offerPriceAlerts()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
