@@ -1,9 +1,11 @@
 package com.runetick;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-import com.google.gson.reflect.TypeToken;
-import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import javax.inject.Inject;
@@ -18,9 +20,6 @@ public class GeHistory
 {
 	private static final String GROUP = "grandexchange";
 	private static final String KEY = "tradeHistory";
-	private static final Type LIST = new TypeToken<List<GeTrade>>()
-	{
-	}.getType();
 
 	private final ConfigManager configManager;
 	private final Gson gson;
@@ -46,7 +45,7 @@ public class GeHistory
 		}
 		try
 		{
-			List<GeTrade> trades = gson.fromJson(json, LIST);
+			List<GeTrade> trades = readTrades(json);
 			if (trades == null || trades.isEmpty())
 			{
 				return Collections.emptyList();
@@ -58,5 +57,20 @@ public class GeHistory
 		{
 			return Collections.emptyList();
 		}
+	}
+
+	private List<GeTrade> readTrades(String json)
+	{
+		JsonArray array = new JsonParser().parse(json).getAsJsonArray();
+		List<GeTrade> trades = new ArrayList<>();
+		for (JsonElement element : array)
+		{
+			GeTrade trade = gson.fromJson(element, GeTrade.class);
+			if (trade != null)
+			{
+				trades.add(trade);
+			}
+		}
+		return trades;
 	}
 }

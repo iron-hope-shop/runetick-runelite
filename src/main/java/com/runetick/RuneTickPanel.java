@@ -73,13 +73,11 @@ public class RuneTickPanel extends PluginPanel
 	private final JPanel col = new JPanel();
 	private final JButton connectBtn = new JButton();
 	private final JButton siteBtn = new JButton("Open site");
-	private final JButton settingsBtn = new JButton("Settings");
 
 	private boolean linked;
 	private final Runnable onConnect;
 	private final Runnable onDisconnect;
 	private final Runnable onOpenSite;
-	private final Runnable onOpenConfig;
 	private final IntConsumer onOpenItem;
 	private final Consumer<String> onSearch;
 	private final IntConsumer onInspect;
@@ -89,7 +87,6 @@ public class RuneTickPanel extends PluginPanel
 		Runnable onConnect,
 		Runnable onDisconnect,
 		Runnable onOpenSite,
-		Runnable onOpenConfig,
 		IntConsumer onOpenItem,
 		Consumer<String> onSearch,
 		IntConsumer onInspect,
@@ -98,7 +95,6 @@ public class RuneTickPanel extends PluginPanel
 		this.onConnect = onConnect;
 		this.onDisconnect = onDisconnect;
 		this.onOpenSite = onOpenSite;
-		this.onOpenConfig = onOpenConfig == null ? () -> { } : onOpenConfig;
 		this.onOpenItem = onOpenItem == null ? id -> { } : onOpenItem;
 		this.onSearch = onSearch == null ? q -> { } : onSearch;
 		this.onInspect = onInspect == null ? id -> { } : onInspect;
@@ -149,28 +145,12 @@ public class RuneTickPanel extends PluginPanel
 			}
 		});
 
-		flat(settingsBtn);
-		settingsBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-		settingsBtn.setToolTipText("Open this plugin's RuneLite settings");
-		settingsBtn.addActionListener(e ->
-		{
-			try
-			{
-				onOpenConfig.run();
-			}
-			catch (Throwable t)
-			{
-				showMessage("Could not open settings");
-			}
-		});
-
-		JPanel actions = new JPanel(new GridLayout(1, 3, 4, 0));
+		JPanel actions = new JPanel(new GridLayout(1, 2, 4, 0));
 		actions.setOpaque(false);
 		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
 		actions.setMaximumSize(new Dimension(columnWidth(), 28));
 		actions.add(connectBtn);
 		actions.add(siteBtn);
-		actions.add(settingsBtn);
 
 		JPanel wealth = wealthStrip();
 

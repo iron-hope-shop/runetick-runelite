@@ -5,12 +5,9 @@ import com.google.inject.Provides;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.awt.Component;
-import java.awt.Container;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -18,7 +15,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.lang.reflect.Method;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -180,7 +176,7 @@ public class RuneTickPlugin extends Plugin
 		tracker.reset();
 
 		panel = new RuneTickPanel(
-			this::connect, this::disconnect, this::openSite, this::openConfig, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
+			this::connect, this::disconnect, this::openSite, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
 		navButton = NavigationButton.builder()
 			.tooltip("Runetick")
 			.icon(RuneTickPanel.icon())
@@ -1378,79 +1374,6 @@ public class RuneTickPlugin extends Plugin
 		{
 			log.error("Error handling Grand Exchange offer update", t);
 		}
-	}
-
-	private void openConfig()
-	{
-		SwingUtilities.invokeLater(() ->
-		{
-			try
-			{
-				Object ui = readField(clientToolbar, "clientUI");
-				@SuppressWarnings("unchecked")
-				Set<NavigationButton> entries = (Set<NavigationButton>) readField(ui, "sidebarEntries");
-				Object list = null;
-				NavigationButton configButton = null;
-				if (entries != null)
-				{
-					for (NavigationButton button : entries)
-					{
-						Object found = findPluginList(button.getPanel());
-						if (found != null)
-						{
-							list = found;
-							configButton = button;
-							break;
-						}
-					}
-				}
-				if (list == null || configButton == null)
-				{
-					panel.showMessage("Open the wrench, then RuneTick.");
-					return;
-				}
-				clientToolbar.openPanel(configButton);
-				Method open = list.getClass().getDeclaredMethod("openConfigurationPanel", String.class);
-				open.setAccessible(true);
-				open.invoke(list, "RuneTick");
-			}
-			catch (Throwable t)
-			{
-				log.error("Could not open Runetick settings", t);
-				panel.showMessage("Open the wrench, then RuneTick.");
-			}
-		});
-	}
-
-	private static Object findPluginList(Component component)
-	{
-		if (component == null)
-		{
-			return null;
-		}
-		if ("net.runelite.client.plugins.config.PluginListPanel".equals(component.getClass().getName()))
-		{
-			return component;
-		}
-		if (component instanceof Container)
-		{
-			for (Component child : ((Container) component).getComponents())
-			{
-				Object found = findPluginList(child);
-				if (found != null)
-				{
-					return found;
-				}
-			}
-		}
-		return null;
-	}
-
-	private static Object readField(Object target, String name) throws Exception
-	{
-		java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
-		field.setAccessible(true);
-		return field.get(target);
 	}
 
 	private void syncOffer(OfferEvent offerEvent, String itemName)

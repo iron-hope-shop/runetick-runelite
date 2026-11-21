@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
-- Settings opens this plugin's RuneLite config. The button was talking to a panel that was not on screen.
+- Plugin settings stay on the RuneLite plugin list. The sidebar no longer reaches into the client with reflection.
 - Item names stay on the last real name instead of flashing the item id. Right-click on a Grand Exchange slot adds one Runetick line, not two.
 - The Runetick right-click line is green, so it is not the same color as the game's own options.
 ### Changed
