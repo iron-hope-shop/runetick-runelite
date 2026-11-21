@@ -588,9 +588,14 @@ public class RuneTickPanel extends PluginPanel
 
 	void showItem(RuneTickApi.ItemQuote quote)
 	{
+		showItem(quote, null);
+	}
+
+	void showItem(RuneTickApi.ItemQuote quote, Long paidEach)
+	{
 		itemHost.removeAll();
 		itemHost.setVisible(true);
-		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote));
+		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote, paidEach));
 		itemHost.revalidate();
 		itemHost.repaint();
 		reflowHosts();
@@ -727,7 +732,7 @@ public class RuneTickPanel extends PluginPanel
 		return card;
 	}
 
-	private JPanel itemCard(RuneTickApi.ItemQuote quote)
+	private JPanel itemCard(RuneTickApi.ItemQuote quote, Long paidEach)
 	{
 		int w = columnWidth();
 		JPanel card = new JPanel(new BorderLayout(6, 0));
@@ -746,13 +751,32 @@ public class RuneTickPanel extends PluginPanel
 		nameLbl.setText(wrap(name));
 		fitWrapped(nameLbl);
 		text.add(nameLbl);
-		text.add(line("Buy", PriceFormat.gp(quote.getBuy()), INK));
-		text.add(line("Sell", PriceFormat.gp(quote.getSell()), INK));
-		long each = FocusCopy.eachProfit(quote.getBuy(), quote.getSell());
+		if (paidEach != null && paidEach > 0)
+		{
+			text.add(line("Paid", PriceFormat.gp(paidEach), INK));
+		}
+		else
+		{
+			text.add(line("Mkt buy", PriceFormat.gp(quote.getBuy()), INK));
+		}
+		text.add(line("Mkt sell", PriceFormat.gp(quote.getSell()), INK));
+		long each = FocusCopy.eachProfit(paidEach != null && paidEach > 0 ? paidEach : quote.getBuy(), quote.getSell());
 		if (each != Long.MIN_VALUE)
 		{
 			String signed = (each > 0 ? "+" : "") + PriceFormat.gp(each);
-			text.add(line("Each", signed, each >= 0 ? GAIN : LOSS));
+			text.add(line(paidEach != null && paidEach > 0 ? "vs paid" : "Each", signed, each >= 0 ? GAIN : LOSS));
+		}
+		if (quote.getHighalch() != null && quote.getHighalch() > 0)
+		{
+			Long edge = quote.getAlchBeatsSell();
+			if (edge != null && edge > 0)
+			{
+				text.add(line("Alch", "+" + PriceFormat.gp(edge) + " vs sell", GAIN));
+			}
+			else
+			{
+				text.add(line("Alch", PriceFormat.gp(quote.getHighalch()) + " · sell is better", MUTED));
+			}
 		}
 		if (quote.getLimit() > 0)
 		{
@@ -761,10 +785,6 @@ public class RuneTickPanel extends PluginPanel
 		if (quote.getVolume() > 0)
 		{
 			text.add(line("Volume", PriceFormat.gp(quote.getVolume()), INK));
-		}
-		if (quote.getAlchBeatsSell() != null && quote.getAlchBeatsSell() > 0)
-		{
-			text.add(line("Alch", "+" + PriceFormat.gp(quote.getAlchBeatsSell()) + " vs sell", GAIN));
 		}
 		JButton open = new JButton("Open on site");
 		flat(open);

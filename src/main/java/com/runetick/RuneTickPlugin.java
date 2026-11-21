@@ -1,14 +1,17 @@
 package com.runetick;
 
 import com.google.inject.Binder;
-import com.google.inject.Injector;
 import com.google.inject.Provides;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.awt.Component;
+import java.awt.Container;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -27,6 +30,7 @@ import net.runelite.api.InventoryID;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.MenuAction;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
@@ -68,6 +72,10 @@ public class RuneTickPlugin extends Plugin
 	private static final int NET_WORTH_REVALUE_TICKS = 10;
 	private static final long OFFER_GUARD_SECONDS = 60;
 	private int netWorthTickCounter;
+	/** Last real item name. A lookup that comes back as the id must not replace it. */
+	private final Map<Integer, String> itemNames = new ConcurrentHashMap<>();
+	/** One Runetick menu line per right-click. */
+	private boolean runetickMenuAdded;
 	private final AtomicReference<Long> nextSyncAllowedAt = new AtomicReference<>(0L);
 	private final AtomicBoolean syncCoalesce = new AtomicBoolean(false);
 	private ScheduledFuture<?> syncDebounceTask;
@@ -77,9 +85,6 @@ public class RuneTickPlugin extends Plugin
 
 	@Inject
 	private ClientToolbar clientToolbar;
-
-	@Inject
-	private Injector injector;
 
 	@Inject
 	private OverlayManager overlayManager;
@@ -403,15 +408,7 @@ public class RuneTickPlugin extends Plugin
 			for (int i = trades.size() - 1; i >= 0 && historyLines.size() < 8; i--)
 			{
 				GeTrade t = trades.get(i);
-				String name;
-				try
-				{
-					name = itemManager.getItemComposition(t.getItemId()).getName();
-				}
-				catch (Throwable ex)
-				{
-					name = "#" + t.getItemId();
-				}
+				String name = itemName(t.getItemId());
 				historyLines.add(BoardLine.of(
 					t.getItemId(),
 					name,
@@ -469,10 +466,25 @@ public class RuneTickPlugin extends Plugin
 			{
 				break;
 			}
-			String mid = (row.side.equals("buy") ? "Buy" : "Sell")
+			boolean sell = "sell".equals(row.side);
+			String mid = (sell ? "Sell" : "Buy")
 				+ " " + row.filled + "/" + row.total
 				+ " @ " + PriceFormat.gpCompact(row.price);
 			String total = row.eta.isEmpty() ? "" : ("eta " + row.eta);
+			if (sell)
+			{
+				CostBasis.Open paid = CostBasis.openBuys(geHistory.all(), row.itemId);
+				if (paid != null)
+				{
+					long vs = FocusCopy.eachProfit(paid.each, row.price);
+					String paidBit = "paid " + PriceFormat.gpCompact(paid.each);
+					if (vs != Long.MIN_VALUE)
+					{
+						paidBit = paidBit + " · " + (vs > 0 ? "+" : "") + PriceFormat.gpCompact(vs);
+					}
+					total = total.isEmpty() ? paidBit : paidBit + " · " + total;
+				}
+			}
 			if (row.alert != OfferAlert.Kind.NONE)
 			{
 				total = total.isEmpty() ? "watch price" : total + " · watch";
@@ -594,7 +606,9 @@ public class RuneTickPlugin extends Plugin
 				{
 					return;
 				}
-				SwingUtilities.invokeLater(() -> panel.showItem(quote));
+				CostBasis.Open paid = CostBasis.openBuys(geHistory.all(), itemId);
+				Long paidEach = paid == null ? null : paid.each;
+				SwingUtilities.invokeLater(() -> panel.showItem(quote, paidEach));
 			}
 			catch (Throwable t)
 			{
@@ -835,14 +849,7 @@ public class RuneTickPlugin extends Plugin
 					{
 						continue;
 					}
-					try
-					{
-						names.put(t.getItemId(), itemManager.getItemComposition(t.getItemId()).getName());
-					}
-					catch (Throwable ex)
-					{
-						names.put(t.getItemId(), "Item " + t.getItemId());
-					}
+					names.put(t.getItemId(), itemName(t.getItemId()));
 				}
 				List<RuneTickApi.GeLiveOffer> geOffers = snapshotLiveOffers();
 				RuneTickApi.NetWorthSnap netWorth = snapshotNetWorth();
@@ -895,14 +902,7 @@ public class RuneTickPlugin extends Plugin
 			RuneTickApi.GeLiveOffer row = new RuneTickApi.GeLiveOffer();
 			row.setSlot(i);
 			row.setItemId(offer.getItemId());
-			try
-			{
-				row.setItemName(itemManager.getItemComposition(offer.getItemId()).getName());
-			}
-			catch (Throwable t)
-			{
-				row.setItemName("Item " + offer.getItemId());
-			}
+			row.setItemName(itemName(offer.getItemId()));
 			GrandExchangeOfferState st = offer.getState();
 			boolean buy = st == GrandExchangeOfferState.BUYING
 				|| st == GrandExchangeOfferState.BOUGHT
@@ -1183,11 +1183,17 @@ public class RuneTickPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onClientTick(ClientTick tick)
+	{
+		runetickMenuAdded = false;
+	}
+
+	@Subscribe
 	public void onMenuEntryAdded(MenuEntryAdded event)
 	{
 		try
 		{
-			if (!config.openItemOnSite() || event == null)
+			if (runetickMenuAdded || !config.openItemOnSite() || event == null)
 			{
 				return;
 			}
@@ -1213,14 +1219,15 @@ public class RuneTickPlugin extends Plugin
 			{
 				return;
 			}
-			// One entry per menu: Examine on items, View/Abort on GE slots, Back on the offer page.
-			if (!"Examine".equals(option) && !"View offer".equals(option) && !"Abort offer".equals(option) && !"Back".equals(option))
+			// One entry per menu. A GE slot menu has both View offer and Abort offer.
+			if (!"Examine".equals(option) && !"View offer".equals(option) && !"Back".equals(option))
 			{
 				return;
 			}
 			final int id = itemId;
+			runetickMenuAdded = true;
 			client.createMenuEntry(-1)
-				.setOption("Runetick")
+				.setOption("<col=22c55e>Runetick</col>")
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
 				.onClick(e -> openItemOnSite(id));
@@ -1229,6 +1236,34 @@ public class RuneTickPlugin extends Plugin
 		{
 			log.error("Error adding Runetick menu entry", t);
 		}
+	}
+
+	/** Keep the last real name. A lookup that returns the id, or "null", must not replace it. */
+	private String itemName(int itemId)
+	{
+		if (itemId <= 0)
+		{
+			return "Item";
+		}
+		String cached = itemNames.get(itemId);
+		try
+		{
+			String name = itemManager.getItemComposition(itemId).getName();
+			if (name != null)
+			{
+				name = name.trim();
+			}
+			if (name != null && !name.isEmpty() && !"null".equalsIgnoreCase(name) && !name.equals(Integer.toString(itemId)))
+			{
+				itemNames.put(itemId, name);
+				return name;
+			}
+		}
+		catch (Throwable t)
+		{
+			// Composition asserts off the client thread. The cached name still stands.
+		}
+		return cached != null ? cached : ("Item " + itemId);
 	}
 
 	@Subscribe
@@ -1351,18 +1386,71 @@ public class RuneTickPlugin extends Plugin
 		{
 			try
 			{
-				Class<?> type = Class.forName("net.runelite.client.plugins.config.PluginListPanel");
-				Object list = injector.getInstance(type);
-				Method open = type.getDeclaredMethod("openConfigurationPanel", Plugin.class);
+				Object ui = readField(clientToolbar, "clientUI");
+				@SuppressWarnings("unchecked")
+				Set<NavigationButton> entries = (Set<NavigationButton>) readField(ui, "sidebarEntries");
+				Object list = null;
+				NavigationButton configButton = null;
+				if (entries != null)
+				{
+					for (NavigationButton button : entries)
+					{
+						Object found = findPluginList(button.getPanel());
+						if (found != null)
+						{
+							list = found;
+							configButton = button;
+							break;
+						}
+					}
+				}
+				if (list == null || configButton == null)
+				{
+					panel.showMessage("Open the wrench, then RuneTick.");
+					return;
+				}
+				clientToolbar.openPanel(configButton);
+				Method open = list.getClass().getDeclaredMethod("openConfigurationPanel", String.class);
 				open.setAccessible(true);
-				open.invoke(list, this);
+				open.invoke(list, "RuneTick");
 			}
 			catch (Throwable t)
 			{
 				log.error("Could not open Runetick settings", t);
-				panel.showMessage("Open the plugin list, then the wrench on RuneTick.");
+				panel.showMessage("Open the wrench, then RuneTick.");
 			}
 		});
+	}
+
+	private static Object findPluginList(Component component)
+	{
+		if (component == null)
+		{
+			return null;
+		}
+		if ("net.runelite.client.plugins.config.PluginListPanel".equals(component.getClass().getName()))
+		{
+			return component;
+		}
+		if (component instanceof Container)
+		{
+			for (Component child : ((Container) component).getComponents())
+			{
+				Object found = findPluginList(child);
+				if (found != null)
+				{
+					return found;
+				}
+			}
+		}
+		return null;
+	}
+
+	private static Object readField(Object target, String name) throws Exception
+	{
+		java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+		field.setAccessible(true);
+		return field.get(target);
 	}
 
 	private void syncOffer(OfferEvent offerEvent, String itemName)

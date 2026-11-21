@@ -207,6 +207,7 @@ public class RuneTickApi
 		private int limit;
 		private long volume;
 		private Long alchBeatsSell;
+		private Integer highalch;
 		private Analytics analytics;
 	}
 

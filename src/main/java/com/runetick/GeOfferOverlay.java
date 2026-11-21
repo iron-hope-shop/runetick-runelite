@@ -32,14 +32,16 @@ public class GeOfferOverlay extends OverlayPanel
 	private final RuneTickConfig config;
 	private final RuneTickState state;
 	private final OfferGuard offerGuard;
+	private final GeHistory history;
 
 	@Inject
-	public GeOfferOverlay(Client client, RuneTickConfig config, RuneTickState state, OfferGuard offerGuard)
+	public GeOfferOverlay(Client client, RuneTickConfig config, RuneTickState state, OfferGuard offerGuard, GeHistory history)
 	{
 		this.client = client;
 		this.config = config;
 		this.state = state;
 		this.offerGuard = offerGuard;
+		this.history = history;
 		setPosition(OverlayPosition.TOP_RIGHT);
 		setPriority(PRIORITY_HIGH);
 		setLayer(OverlayLayer.ALWAYS_ON_TOP);
@@ -153,8 +155,17 @@ public class GeOfferOverlay extends OverlayPanel
 		}
 
 		title(PriceFormat.abbreviate(quote.getName(), 28));
-		row("Buy", PriceFormat.gpExact(buy), MUTED, INK);
-		row("Sell", PriceFormat.gpExact(sell), MUTED, INK);
+		boolean selling = offer != null && !buying(offer);
+		CostBasis.Open paid = selling ? CostBasis.openBuys(history.all(), realId) : null;
+		if (paid != null)
+		{
+			row("Paid", PriceFormat.gpExact(paid.each), MUTED, INK);
+		}
+		else
+		{
+			row("Mkt buy", PriceFormat.gpExact(buy), MUTED, INK);
+		}
+		row("Mkt sell", PriceFormat.gpExact(sell), MUTED, INK);
 
 		long each = FocusCopy.eachProfit(buy, sell);
 		if (each != Long.MIN_VALUE)
@@ -186,6 +197,18 @@ public class GeOfferOverlay extends OverlayPanel
 		if (alch != null && alch > 0)
 		{
 			row("Alch", "+" + PriceFormat.gpExact(alch) + " vs sell", MUTED, GAIN);
+		}
+		else if (quote.getHighalch() != null && quote.getHighalch() > 0)
+		{
+			row("Alch", PriceFormat.gpExact(quote.getHighalch()) + " · sell is better", MUTED, MUTED);
+		}
+		if (paid != null)
+		{
+			long vs = FocusCopy.eachProfit(paid.each, sell);
+			if (vs != Long.MIN_VALUE)
+			{
+				row("vs paid", signed(vs), MUTED, vs >= 0 ? GAIN : WARN);
+			}
 		}
 		if (offer != null && offer.getTotalQuantity() > 0)
 		{
