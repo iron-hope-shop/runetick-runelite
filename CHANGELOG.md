@@ -5,7 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Settings opens this plugin's RuneLite config. The button was talking to a panel that was not on screen.
+- Item names stay on the last real name instead of flashing the item id. Right-click on a Grand Exchange slot adds one Runetick line, not two.
+- The Runetick right-click line is green, so it is not the same color as the game's own options.
 ### Changed
+- A sell shows what Grand Exchange history says you paid, and the profit against that price. The market quote is labeled Mkt buy when there is no history.
+- The item card and the Grand Exchange tip always show high alch: how much more it keeps than the sell, or that the sell is better.
+- Sidebar wealth is the full stack (coins, items, and open offers), and it keeps the last coin total if the bag is unreadable for a tick. Session starts after the bank has been opened once.
+- The sidebar lists open flips and recent fills, and Settings opens this plugin's RuneLite config.
+- The Grand Exchange tip and the search card say Alch only when high alchemy beats the taxed sell, after one nature rune.
 - Exceptions go to the RuneLite client log. The separate error.log file is gone.
 - Settings no longer repeat the install warning. Sending offers, history, cash, and item lookups is covered once, at install.
 - The sidebar is a shorter list: gold and session on one line, item rows without boxes.

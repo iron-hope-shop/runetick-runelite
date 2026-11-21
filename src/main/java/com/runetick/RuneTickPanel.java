@@ -73,11 +73,13 @@ public class RuneTickPanel extends PluginPanel
 	private final JPanel col = new JPanel();
 	private final JButton connectBtn = new JButton();
 	private final JButton siteBtn = new JButton("Open site");
+	private final JButton settingsBtn = new JButton("Settings");
 
 	private boolean linked;
 	private final Runnable onConnect;
 	private final Runnable onDisconnect;
 	private final Runnable onOpenSite;
+	private final Runnable onOpenConfig;
 	private final IntConsumer onOpenItem;
 	private final Consumer<String> onSearch;
 	private final IntConsumer onInspect;
@@ -87,6 +89,7 @@ public class RuneTickPanel extends PluginPanel
 		Runnable onConnect,
 		Runnable onDisconnect,
 		Runnable onOpenSite,
+		Runnable onOpenConfig,
 		IntConsumer onOpenItem,
 		Consumer<String> onSearch,
 		IntConsumer onInspect,
@@ -95,6 +98,7 @@ public class RuneTickPanel extends PluginPanel
 		this.onConnect = onConnect;
 		this.onDisconnect = onDisconnect;
 		this.onOpenSite = onOpenSite;
+		this.onOpenConfig = onOpenConfig == null ? () -> { } : onOpenConfig;
 		this.onOpenItem = onOpenItem == null ? id -> { } : onOpenItem;
 		this.onSearch = onSearch == null ? q -> { } : onSearch;
 		this.onInspect = onInspect == null ? id -> { } : onInspect;
@@ -145,12 +149,28 @@ public class RuneTickPanel extends PluginPanel
 			}
 		});
 
-		JPanel actions = new JPanel(new GridLayout(1, 2, 4, 0));
+		flat(settingsBtn);
+		settingsBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+		settingsBtn.setToolTipText("Open this plugin's RuneLite settings");
+		settingsBtn.addActionListener(e ->
+		{
+			try
+			{
+				onOpenConfig.run();
+			}
+			catch (Throwable t)
+			{
+				showMessage("Could not open settings");
+			}
+		});
+
+		JPanel actions = new JPanel(new GridLayout(1, 3, 4, 0));
 		actions.setOpaque(false);
 		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
 		actions.setMaximumSize(new Dimension(columnWidth(), 28));
 		actions.add(connectBtn);
 		actions.add(siteBtn);
+		actions.add(settingsBtn);
 
 		JPanel wealth = wealthStrip();
 
@@ -233,6 +253,12 @@ public class RuneTickPanel extends PluginPanel
 		col.add(section("LIVE GE"));
 		col.add(liveHost);
 		col.add(Box.createVerticalStrut(8));
+		col.add(section("FLIPS"));
+		col.add(flipHost);
+		col.add(Box.createVerticalStrut(8));
+		col.add(section("FILLS"));
+		col.add(histHost);
+		col.add(Box.createVerticalStrut(8));
 		col.add(section("SELLS SOON"));
 		col.add(fatHost);
 		col.add(Box.createVerticalStrut(6));
@@ -281,7 +307,7 @@ public class RuneTickPanel extends PluginPanel
 		strip.setAlignmentX(Component.LEFT_ALIGNMENT);
 		strip.setMaximumSize(new Dimension(columnWidth(), 40));
 		strip.setPreferredSize(new Dimension(columnWidth(), 40));
-		strip.add(kpiTile("GOLD", kpiInvGe));
+		strip.add(kpiTile("WEALTH", kpiInvGe));
 		strip.add(kpiTile("SESSION", kpiSession));
 		return strip;
 	}
@@ -464,37 +490,42 @@ public class RuneTickPanel extends PluginPanel
 			fitWrapped(sync);
 
 			long spendable = s.inventoryGp + (s.bankSeen ? s.bankGp : 0);
-			kpiInvGe.setText(PriceFormat.gpCompact(spendable));
-			kpiInvGe.setForeground(INK);
+			NetWorth worth = s.netWorth;
 
-			if (s.showNetWorth && s.netWorth != null)
+			if (s.showNetWorth && worth != null)
 			{
-				kpiNet.setText(PriceFormat.gpCompact(s.netWorth.totalGp));
-				if (s.netWorth.sessionArmed)
+				kpiInvGe.setText(PriceFormat.gpCompact(worth.totalGp));
+				kpiInvGe.setForeground(INK);
+				kpiNet.setText(PriceFormat.gpCompact(worth.totalGp));
+				if (worth.sessionArmed)
 				{
-					long d = s.netWorth.sessionDeltaGp;
+					long d = worth.sessionDeltaGp;
 					kpiSession.setText((d > 0 ? "+" : "") + PriceFormat.gpCompact(d));
 					kpiSession.setForeground(d >= 0 ? GAIN : LOSS);
 				}
 				else
 				{
-					kpiSession.setText(s.netWorth.bankItemsSeen ? "..." : "bank");
+					kpiSession.setText("-");
 					kpiSession.setForeground(MUTED);
 				}
 				StringBuilder meta = new StringBuilder();
-				if (!s.bankSeen)
+				meta.append("bag ").append(PriceFormat.gpCompact(s.inventoryGp));
+				if (s.bankSeen)
 				{
-					meta.append("Open the bank once for the full stack");
+					meta.append(" · bank ").append(PriceFormat.gpCompact(s.bankGp));
 				}
 				else
 				{
-					meta.append("bag ").append(PriceFormat.gpCompact(s.netWorth.invItemsGp));
-					meta.append(" · GE ").append(PriceFormat.gpCompact(s.netWorth.offersGp));
+					meta.append(" · open bank once");
 				}
+				meta.append(" · items ").append(PriceFormat.gpCompact(worth.invItemsGp + (worth.bankItemsSeen ? worth.bankItemsGp : 0)));
+				meta.append(" · offers ").append(PriceFormat.gpCompact(worth.offersGp));
 				kpiMeta.setText(wrap(meta.toString()));
 			}
 			else
 			{
+				kpiInvGe.setText(PriceFormat.gpCompact(spendable));
+				kpiInvGe.setForeground(INK);
 				kpiNet.setText(PriceFormat.gpCompact(spendable));
 				kpiSession.setText("-");
 				kpiSession.setForeground(MUTED);
@@ -557,9 +588,14 @@ public class RuneTickPanel extends PluginPanel
 
 	void showItem(RuneTickApi.ItemQuote quote)
 	{
+		showItem(quote, null);
+	}
+
+	void showItem(RuneTickApi.ItemQuote quote, Long paidEach)
+	{
 		itemHost.removeAll();
 		itemHost.setVisible(true);
-		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote));
+		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote, paidEach));
 		itemHost.revalidate();
 		itemHost.repaint();
 		reflowHosts();
@@ -696,7 +732,7 @@ public class RuneTickPanel extends PluginPanel
 		return card;
 	}
 
-	private JPanel itemCard(RuneTickApi.ItemQuote quote)
+	private JPanel itemCard(RuneTickApi.ItemQuote quote, Long paidEach)
 	{
 		int w = columnWidth();
 		JPanel card = new JPanel(new BorderLayout(6, 0));
@@ -715,13 +751,32 @@ public class RuneTickPanel extends PluginPanel
 		nameLbl.setText(wrap(name));
 		fitWrapped(nameLbl);
 		text.add(nameLbl);
-		text.add(line("Buy", PriceFormat.gp(quote.getBuy()), INK));
-		text.add(line("Sell", PriceFormat.gp(quote.getSell()), INK));
-		long each = FocusCopy.eachProfit(quote.getBuy(), quote.getSell());
+		if (paidEach != null && paidEach > 0)
+		{
+			text.add(line("Paid", PriceFormat.gp(paidEach), INK));
+		}
+		else
+		{
+			text.add(line("Mkt buy", PriceFormat.gp(quote.getBuy()), INK));
+		}
+		text.add(line("Mkt sell", PriceFormat.gp(quote.getSell()), INK));
+		long each = FocusCopy.eachProfit(paidEach != null && paidEach > 0 ? paidEach : quote.getBuy(), quote.getSell());
 		if (each != Long.MIN_VALUE)
 		{
 			String signed = (each > 0 ? "+" : "") + PriceFormat.gp(each);
-			text.add(line("Each", signed, each >= 0 ? GAIN : LOSS));
+			text.add(line(paidEach != null && paidEach > 0 ? "vs paid" : "Each", signed, each >= 0 ? GAIN : LOSS));
+		}
+		if (quote.getHighalch() != null && quote.getHighalch() > 0)
+		{
+			Long edge = quote.getAlchBeatsSell();
+			if (edge != null && edge > 0)
+			{
+				text.add(line("Alch", "+" + PriceFormat.gp(edge) + " vs sell", GAIN));
+			}
+			else
+			{
+				text.add(line("Alch", PriceFormat.gp(quote.getHighalch()) + " · sell is better", MUTED));
+			}
 		}
 		if (quote.getLimit() > 0)
 		{

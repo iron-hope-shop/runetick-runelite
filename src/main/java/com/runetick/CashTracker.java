@@ -80,7 +80,13 @@ public class CashTracker
 
 	public void refreshInventory()
 	{
-		long next = countGp(client.getItemContainer(InventoryID.INVENTORY));
+		ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
+		// A missing container is not an empty bag. Writing 0 here stuck wealth at zero.
+		if (inv == null)
+		{
+			return;
+		}
+		long next = countGp(inv);
 		if (next != inventoryGp)
 		{
 			inventoryGp = next;

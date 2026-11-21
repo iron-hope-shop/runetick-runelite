@@ -32,6 +32,11 @@ public class GeHistory
 		this.gson = gson;
 	}
 
+	public List<GeTrade> all()
+	{
+		return recent(Integer.MAX_VALUE);
+	}
+
 	public List<GeTrade> recent(int limit)
 	{
 		String json = configManager.getRSProfileConfiguration(GROUP, KEY);
