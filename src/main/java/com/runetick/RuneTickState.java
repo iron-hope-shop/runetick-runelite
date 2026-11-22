@@ -4,6 +4,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.inject.Singleton;
 
 /**
@@ -35,6 +37,8 @@ public class RuneTickState
 	private volatile boolean syncing;
 	private volatile boolean loggedIn;
 	private volatile String syncStatus = "";
+	private final Map<Integer, String> hoverPrices = new ConcurrentHashMap<>();
+	private final AtomicInteger hoverItem = new AtomicInteger();
 	private volatile Map<Integer, BankView.Mark> valueMarks = Collections.emptyMap();
 	private volatile Map<Integer, BankView.Mark> profitMarks = Collections.emptyMap();
 
@@ -377,5 +381,28 @@ public class RuneTickState
 			}
 		}
 		return out;
+	}
+
+	public void rememberPrice(int itemId, String line)
+	{
+		if (itemId > 0 && line != null && !line.isEmpty())
+		{
+			hoverPrices.put(itemId, line);
+		}
+	}
+
+	public String priceLine(int itemId)
+	{
+		return hoverPrices.get(itemId);
+	}
+
+	public void setHoverItem(int itemId)
+	{
+		hoverItem.set(Math.max(0, itemId));
+	}
+
+	public int hoverItem()
+	{
+		return hoverItem.get();
 	}
 }

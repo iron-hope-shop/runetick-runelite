@@ -78,6 +78,15 @@ public class RuneTickApi
 		private long geSyncedAt;
 		/** Site theme highlight, #rrggbb. */
 		private String accent;
+		private List<WatchList> lists;
+	}
+
+	@Data
+	public static class WatchList
+	{
+		private String id;
+		private String name;
+		private List<Integer> itemIds;
 	}
 
 	/** Live Grand Exchange slot for POST /v1/me/sync. */
@@ -313,6 +322,13 @@ public class RuneTickApi
 		{
 			throw new IOException("Unreadable placed flips from Runetick", e);
 		}
+	}
+
+	public void addToWatchlist(int itemId) throws IOException
+	{
+		JsonObject body = new JsonObject();
+		body.addProperty("itemId", itemId);
+		send("POST", "v1/me/lists/default/items", body, true);
 	}
 
 	public Me getMe() throws IOException

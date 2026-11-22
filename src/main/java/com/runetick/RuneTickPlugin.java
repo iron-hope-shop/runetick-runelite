@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -542,6 +543,7 @@ public class RuneTickPlugin extends Plugin
 		}
 	}
 
+	private final Set<Integer> priced = ConcurrentHashMap.newKeySet();
 	private final AtomicInteger searchGen = new AtomicInteger();
 	private final AtomicInteger inspectGen = new AtomicInteger();
 
@@ -572,6 +574,7 @@ public class RuneTickPlugin extends Plugin
 						? ""
 						: ((each > 0 ? "+" : "") + PriceFormat.gp(each) + " each");
 					lines.add(BoardLine.of(hit.getId(), hit.getName(), "buy " + buy + "  sell " + sell, profit));
+					rememberPrice(hit.getId(), hit.getBuy(), hit.getSell());
 				}
 				if (gen != searchGen.get())
 				{
@@ -586,6 +589,90 @@ public class RuneTickPlugin extends Plugin
 				{
 					SwingUtilities.invokeLater(() -> panel.showSearch(Collections.emptyList(), "Search unavailable"));
 				}
+			}
+		});
+	}
+
+	private void rememberPrice(int itemId, long buy, long sell)
+	{
+		long each = FocusCopy.eachProfit(buy, sell);
+		String line = "buy " + PriceFormat.gp(buy) + " · sell " + PriceFormat.gp(sell);
+		if (each != Long.MIN_VALUE)
+		{
+			line += " · " + (each > 0 ? "+" : "") + PriceFormat.gp(each);
+		}
+		state.rememberPrice(itemId, line);
+	}
+
+	private void loadWatch()
+	{
+		if (!state.isLinked())
+		{
+			SwingUtilities.invokeLater(() -> panel.showWatch(Collections.emptyList(), "connect first"));
+			return;
+		}
+		executor.submit(() ->
+		{
+			try
+			{
+				RuneTickApi.Me me = api.getMe();
+				List<Integer> ids = new ArrayList<>();
+				if (me.getLists() != null)
+				{
+					for (RuneTickApi.WatchList list : me.getLists())
+					{
+						if (list != null && list.getItemIds() != null)
+						{
+							ids.addAll(list.getItemIds());
+						}
+					}
+				}
+				List<BoardLine> lines = new ArrayList<>();
+				for (Integer id : ids)
+				{
+					if (id == null || id <= 0 || lines.size() >= 12)
+					{
+						continue;
+					}
+					RuneTickApi.ItemQuote quote = api.getItem(id);
+					if (quote == null)
+					{
+						continue;
+					}
+					rememberPrice(id, quote.getBuy(), quote.getSell());
+					long each = FocusCopy.eachProfit(quote.getBuy(), quote.getSell());
+					String profit = each == Long.MIN_VALUE ? "" : ((each > 0 ? "+" : "") + PriceFormat.gp(each));
+					lines.add(BoardLine.of(id, quote.getName(), "buy " + PriceFormat.gp(quote.getBuy()), profit));
+				}
+				SwingUtilities.invokeLater(() -> panel.showWatch(lines, lines.isEmpty() ? "nothing saved" : ""));
+			}
+			catch (Throwable t)
+			{
+				log.error("Watchlist failed", t);
+				SwingUtilities.invokeLater(() -> panel.showWatch(Collections.emptyList(), "unavailable"));
+			}
+		});
+	}
+
+	private void watchItem(int itemId)
+	{
+		if (!state.isLinked())
+		{
+			panel.showMessage("Connect Runetick to save a watch");
+			return;
+		}
+		executor.submit(() ->
+		{
+			try
+			{
+				api.addToWatchlist(itemId);
+				loadWatch();
+				SwingUtilities.invokeLater(() -> panel.showMessage("Added to your watchlist"));
+			}
+			catch (Throwable t)
+			{
+				log.error("Could not watch item " + itemId, t);
+				SwingUtilities.invokeLater(() -> panel.showMessage("Could not save that watch"));
 			}
 		});
 	}
@@ -609,6 +696,10 @@ public class RuneTickPlugin extends Plugin
 				}
 				CostBasis.Open paid = CostBasis.openBuys(geHistory.all(), itemId);
 				Long paidEach = paid == null ? null : paid.each;
+				if (quote != null)
+				{
+					rememberPrice(itemId, quote.getBuy(), quote.getSell());
+				}
 				SwingUtilities.invokeLater(() -> panel.showItem(quote, paidEach));
 			}
 			catch (Throwable t)
@@ -674,6 +765,7 @@ public class RuneTickPlugin extends Plugin
 			}
 			refreshFlips();
 			refreshPlanAndSignals();
+			loadWatch();
 			queueLocalSync();
 		}
 	}
@@ -1238,6 +1330,27 @@ public class RuneTickPlugin extends Plugin
 	public void onClientTick(ClientTick tick)
 	{
 		runetickMenuAdded = false;
+		int hover = state.hoverItem();
+		if (hover > 0 && state.priceLine(hover) == null && priced.add(hover))
+		{
+			final int id = hover;
+			executor.submit(() ->
+			{
+				try
+				{
+					RuneTickApi.ItemQuote quote = api.getItem(id);
+					if (quote != null)
+					{
+						rememberPrice(id, quote.getBuy(), quote.getSell());
+					}
+				}
+				catch (Throwable t)
+				{
+					log.error("Hover price failed", t);
+					priced.remove(id);
+				}
+			});
+		}
 	}
 
 	@Subscribe
@@ -1282,7 +1395,16 @@ public class RuneTickPlugin extends Plugin
 				.setOption("<col=22c55e>Runetick</col>")
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
-				.onClick(e -> openItemOnSite(id));
+				.onClick(e ->
+				{
+					clientToolbar.openPanel(navButton);
+					inspectItem(id);
+				});
+			client.createMenuEntry(-1)
+				.setOption("<col=22c55e>Watch</col>")
+				.setTarget(event.getTarget())
+				.setType(MenuAction.RUNELITE)
+				.onClick(e -> watchItem(id));
 		}
 		catch (Throwable t)
 		{

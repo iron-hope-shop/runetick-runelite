@@ -64,6 +64,9 @@ public class RuneTickPanel extends PluginPanel
 	private final JPanel searchHost = boardHost();
 	private final JPanel itemHost = boardHost();
 	private final JLabel searchLabel = section("SEARCH");
+	private final JLabel searchCaption = section("Search");
+	private final JPanel watchHost = boardHost();
+	private final JLabel watchLabel = section("WATCHLIST");
 	private final JPanel bankHost = boardHost();
 	private final JPanel liveHost = boardHost();
 	private final JPanel fatHost = boardHost();
@@ -202,6 +205,7 @@ public class RuneTickPanel extends PluginPanel
 		JTextField search = new JTextField();
 		search.setFont(FontManager.getRunescapeSmallFont());
 		search.setForeground(Color.WHITE);
+		search.setOpaque(false);
 		search.setBackground(CARD);
 		search.setCaretColor(Color.WHITE);
 		search.setBorder(BorderFactory.createCompoundBorder(
@@ -210,6 +214,49 @@ public class RuneTickPanel extends PluginPanel
 		search.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		search.setAlignmentX(Component.LEFT_ALIGNMENT);
 		search.setToolTipText("Find an item. Click a result to see buy, sell, and profit here.");
+		JLabel searchHint = plain(FontManager.getRunescapeSmallFont(), MUTED);
+		searchHint.setText("Search items");
+		searchHint.setBorder(new EmptyBorder(0, 8, 0, 0));
+		searchHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+		search.getDocument().addDocumentListener(new DocumentListener()
+		{
+			private void sync()
+			{
+				searchHint.setVisible(search.getText().isEmpty() && !search.isFocusOwner());
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e)
+			{
+				sync();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e)
+			{
+				sync();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e)
+			{
+				sync();
+			}
+		});
+		search.addFocusListener(new java.awt.event.FocusAdapter()
+		{
+			@Override
+			public void focusGained(java.awt.event.FocusEvent e)
+			{
+				searchHint.setVisible(false);
+			}
+
+			@Override
+			public void focusLost(java.awt.event.FocusEvent e)
+			{
+				searchHint.setVisible(search.getText().isEmpty());
+			}
+		});
 		Timer searchTimer = new Timer(250, e -> onSearch.accept(search.getText()));
 		searchTimer.setRepeats(false);
 		search.getDocument().addDocumentListener(new DocumentListener()
@@ -235,10 +282,35 @@ public class RuneTickPanel extends PluginPanel
 
 		searchLabel.setVisible(false);
 		searchHost.setVisible(false);
+		watchLabel.setVisible(false);
+		watchHost.setVisible(false);
 		itemHost.setVisible(false);
 
 		col.add(Box.createVerticalStrut(8));
-		col.add(search);
+		col.add(searchCaption);
+		JPanel searchBox = new JPanel();
+		searchBox.setLayout(new javax.swing.OverlayLayout(searchBox));
+		searchBox.setOpaque(true);
+		searchBox.setBackground(CARD);
+		searchBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+		searchBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		search.setAlignmentX(0f);
+		search.setAlignmentY(0.5f);
+		searchHint.setAlignmentX(0f);
+		searchHint.setAlignmentY(0.5f);
+		searchHint.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
+				search.requestFocusInWindow();
+			}
+		});
+		searchBox.add(search);
+		searchBox.add(searchHint);
+		col.add(searchBox);
+		col.add(watchLabel);
+		col.add(watchHost);
 		col.add(Box.createVerticalStrut(4));
 		col.add(searchLabel);
 		col.add(searchHost);
@@ -270,7 +342,16 @@ public class RuneTickPanel extends PluginPanel
 		scroll.setBorder(null);
 		scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-		scroll.getVerticalScrollBar().setUnitIncrement(16);
+		scroll.getVerticalScrollBar().setUnitIncrement(64);
+		java.awt.event.MouseWheelListener wheel = e ->
+		{
+			javax.swing.JScrollBar bar = scroll.getVerticalScrollBar();
+			bar.setValue(bar.getValue() + e.getWheelRotation() * 72);
+			e.consume();
+		};
+		scroll.addMouseWheelListener(wheel);
+		col.addMouseWheelListener(wheel);
+		addMouseWheelListener(wheel);
 		scroll.getViewport().setBackground(BG);
 		scroll.setBackground(BG);
 		col.setBackground(BG);
@@ -566,6 +647,18 @@ public class RuneTickPanel extends PluginPanel
 		});
 	}
 
+	void showWatch(List<BoardLine> lines, String empty)
+	{
+		boolean show = (lines != null && !lines.isEmpty()) || (empty != null && !empty.isEmpty());
+		watchLabel.setVisible(show);
+		watchHost.setVisible(show);
+		if (show)
+		{
+			fillBoard(watchHost, lines, empty, true);
+		}
+		reflowHosts();
+	}
+
 	void showSearch(List<BoardLine> lines, String empty)
 	{
 		boolean show = (lines != null && !lines.isEmpty()) || (empty != null && !empty.isEmpty());
@@ -787,6 +880,15 @@ public class RuneTickPanel extends PluginPanel
 				text.add(line("Alch", PriceFormat.gp(quote.getHighalch()) + " · sell is better", MUTED));
 			}
 		}
+		if (each != Long.MIN_VALUE)
+		{
+			text.add(line("×10", signedQty(each, 10), each >= 0 ? GAIN : LOSS));
+			text.add(line("×100", signedQty(each, 100), each >= 0 ? GAIN : LOSS));
+			if (quote.getLimit() > 0)
+			{
+				text.add(line("Full limit", signedQty(each, quote.getLimit()), each >= 0 ? GAIN : LOSS));
+			}
+		}
 		if (quote.getLimit() > 0)
 		{
 			text.add(line("Limit", PriceFormat.gp(quote.getLimit()), INK));
@@ -808,6 +910,12 @@ public class RuneTickPanel extends PluginPanel
 		card.setMaximumSize(new Dimension(w, h));
 		card.setPreferredSize(new Dimension(w, h));
 		return card;
+	}
+
+	private static String signedQty(long each, int qty)
+	{
+		long total = each * qty;
+		return (total > 0 ? "+" : "") + PriceFormat.gp(total);
 	}
 
 	private JLabel line(String label, String value, Color valueColor)

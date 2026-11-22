@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- The sidebar search says Search items until you type. The list scrolls with the wheel. Watchlist shows the items saved on your Runetick account. An item card has a small profit table for 1, 10, 100, and a full limit. Hovering an item shows its buy, sell, and each-profit once that price is known. Right-click Runetick looks the item up in the panel. Right-click Watch saves it to the watchlist.
+
+### Added
 - Bank view, from the sidebar button or the plugin settings. High value marks each stack worth at least the amount you set with its value and dims the rest. To sell marks items you bought on the Grand Exchange and still hold: green with how much the taxed sell is up on what you paid, red with how much it is down. It only draws over the bank; it does not move, hide, or click anything.
 
 ### Changed
