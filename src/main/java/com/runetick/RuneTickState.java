@@ -35,6 +35,24 @@ public class RuneTickState
 	private volatile boolean syncing;
 	private volatile boolean loggedIn;
 	private volatile String syncStatus = "";
+	private volatile Map<Integer, BankView.Mark> valueMarks = Collections.emptyMap();
+	private volatile Map<Integer, BankView.Mark> profitMarks = Collections.emptyMap();
+
+	public Map<Integer, BankView.Mark> getValueMarks()
+	{
+		return valueMarks;
+	}
+
+	public Map<Integer, BankView.Mark> getProfitMarks()
+	{
+		return profitMarks;
+	}
+
+	public void setItemMarks(Map<Integer, BankView.Mark> value, Map<Integer, BankView.Mark> profit)
+	{
+		valueMarks = value == null ? Collections.<Integer, BankView.Mark>emptyMap() : value;
+		profitMarks = profit == null ? Collections.<Integer, BankView.Mark>emptyMap() : profit;
+	}
 
 	public boolean isLinked()
 	{
@@ -338,22 +356,10 @@ public class RuneTickState
 		return null;
 	}
 
-	/** Item ids that should get inventory highlights: open flips, fat spreads, dips. */
+	/** Item ids tagged because they are one of the player's own open flips. */
 	public Map<Integer, String> highlightLabels()
 	{
 		Map<Integer, String> out = new HashMap<>();
-		for (RuneTickApi.FatSpread f : fat)
-		{
-			out.put(f.getId(), "margin " + PriceFormat.gp(f.getBid()));
-		}
-		for (RuneTickApi.Dip d : dips)
-		{
-			out.put(d.getId(), "dip " + PriceFormat.gp(d.getPrice()));
-		}
-		for (RuneTickApi.PlanPosition p : recommendations)
-		{
-			out.putIfAbsent(p.getId(), "buy " + PriceFormat.gp(p.getBid()));
-		}
 		for (RuneTickApi.PlacedFlip f : placed)
 		{
 			if ("done".equals(f.getStatus()))

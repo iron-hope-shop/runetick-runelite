@@ -58,6 +58,6 @@ public class RuneTickStateTest
 		Map<Integer, String> labels = state.highlightLabels();
 		assertTrue(labels.get(1).startsWith("buy "));
 		assertTrue(labels.get(2).startsWith("sell "));
-		assertTrue(labels.get(3).startsWith("buy "));
+		assertNull(labels.get(3));
 	}
 }

@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Bank view, from the sidebar button or the plugin settings. High value marks each stack worth at least the amount you set with its value and dims the rest. To sell marks items you bought on the Grand Exchange and still hold: green with how much the taxed sell is up on what you paid, red with how much it is down. It only draws over the bank; it does not move, hide, or click anything.
+
+### Changed
+- Item tags are about your own items. An open flip shows its buy or sell price. An item you bought on the Grand Exchange and still hold shows how the sell compares to what you paid. Items are no longer tagged just for being on the margin or dip list.
+
 ### Fixed
 - Plugin settings stay on the RuneLite plugin list. The sidebar no longer reaches into the client with reflection.
 - Item names stay on the last real name instead of flashing the item id. Right-click on a Grand Exchange slot adds one Runetick line, not two.

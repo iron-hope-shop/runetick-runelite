@@ -92,6 +92,9 @@ public class RuneTickPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
+	private ConfigManager configManager;
+
+	@Inject
 	private ScheduledExecutorService executor;
 
 	@Inject
@@ -177,6 +180,8 @@ public class RuneTickPlugin extends Plugin
 
 		panel = new RuneTickPanel(
 			this::connect, this::disconnect, this::openSite, this::openItemOnSite, this::searchItems, this::inspectItem, itemManager);
+		panel.onBankView(this::cycleBankView);
+		panel.setBankView(config.bankView().toString());
 		navButton = NavigationButton.builder()
 			.tooltip("Runetick")
 			.icon(RuneTickPanel.icon())
@@ -1153,6 +1158,53 @@ public class RuneTickPlugin extends Plugin
 		}
 	}
 
+	/** Client thread only: prices come from the item manager. */
+	private void rebuildItemMarks()
+	{
+		java.util.Map<Integer, Long> prices = new java.util.HashMap<>();
+		java.util.function.ToLongFunction<Integer> priceOf = itemId -> prices.computeIfAbsent(itemId, k ->
+		{
+			try
+			{
+				return (long) Math.max(0, itemManager.getItemPrice(k));
+			}
+			catch (Throwable t)
+			{
+				return 0L;
+			}
+		});
+		List<GeTrade> trades = geHistory == null ? java.util.Collections.<GeTrade>emptyList() : geHistory.all();
+		java.util.Set<Integer> bought = new java.util.HashSet<>();
+		for (GeTrade trade : trades)
+		{
+			if (trade != null && trade.isBuy())
+			{
+				bought.add(trade.getItemId());
+			}
+		}
+		java.util.Set<Integer> held = new java.util.HashSet<>(bankHoldings.snapshot().keySet());
+		held.addAll(inventoryHoldings.snapshot().keySet());
+		held.retainAll(bought);
+		state.setItemMarks(
+			BankView.valueMarks(bankHoldings.snapshot(), priceOf, config.bankValueMin()),
+			BankView.profitMarks(held, priceOf, itemId ->
+			{
+				CostBasis.Open paid = CostBasis.openBuys(trades, itemId);
+				return paid == null ? 0L : paid.each;
+			}));
+	}
+
+	private void cycleBankView()
+	{
+		BankView.Mode next = config.bankView().next();
+		configManager.setConfiguration(RuneTickConfig.GROUP, "bankView", next);
+		clientThread.invokeLater(this::rebuildItemMarks);
+		if (panel != null)
+		{
+			SwingUtilities.invokeLater(() -> panel.setBankView(next.toString()));
+		}
+	}
+
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
@@ -1170,6 +1222,10 @@ public class RuneTickPlugin extends Plugin
 				cashTracker.refreshBank();
 				bankHoldings.refresh(client.getItemContainer(InventoryID.BANK));
 				revalueNetWorthAndPublish();
+			}
+			if (id == InventoryID.INVENTORY.getId() || id == InventoryID.BANK.getId())
+			{
+				rebuildItemMarks();
 			}
 		}
 		catch (Throwable t)

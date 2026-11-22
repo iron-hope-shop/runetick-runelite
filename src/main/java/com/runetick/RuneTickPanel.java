@@ -73,6 +73,8 @@ public class RuneTickPanel extends PluginPanel
 	private final JPanel col = new JPanel();
 	private final JButton connectBtn = new JButton();
 	private final JButton siteBtn = new JButton("Open site");
+	private final JButton bankBtn = new JButton("Bank view: Off");
+	private Runnable onBankView = () -> { };
 
 	private boolean linked;
 	private final Runnable onConnect;
@@ -151,6 +153,21 @@ public class RuneTickPanel extends PluginPanel
 		actions.setMaximumSize(new Dimension(columnWidth(), 28));
 		actions.add(connectBtn);
 		actions.add(siteBtn);
+		flat(bankBtn);
+		bankBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+		bankBtn.setToolTipText("Mark items in the bank: stacks worth a lot, or Grand Exchange buys you can sell for more than you paid");
+		bankBtn.addActionListener(e ->
+		{
+			try
+			{
+				onBankView.run();
+			}
+			catch (Throwable t)
+			{
+				showMessage("Could not change the bank view");
+			}
+		});
+		bankBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JPanel wealth = wealthStrip();
 
@@ -176,6 +193,8 @@ public class RuneTickPanel extends PluginPanel
 		col.add(head);
 		col.add(Box.createVerticalStrut(6));
 		col.add(actions);
+		col.add(javax.swing.Box.createVerticalStrut(4));
+		col.add(bankBtn);
 		col.add(Box.createVerticalStrut(6));
 		col.add(status);
 		col.add(sync);
@@ -305,6 +324,16 @@ public class RuneTickPanel extends PluginPanel
 		tile.add(lab);
 		tile.add(value);
 		return tile;
+	}
+
+	public void onBankView(Runnable action)
+	{
+		onBankView = action == null ? () -> { } : action;
+	}
+
+	public void setBankView(String label)
+	{
+		bankBtn.setText("Bank view: " + label);
 	}
 
 	private static void flat(JButton button)

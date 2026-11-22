@@ -22,6 +22,7 @@ public class InventoryHoldings
 	private final ItemManager itemManager;
 
 	private volatile Map<Integer, Integer> qtyById = Collections.emptyMap();
+	private volatile Map<Integer, Integer> canonByRaw = Collections.emptyMap();
 	private volatile boolean seen;
 
 	@Inject
@@ -33,6 +34,13 @@ public class InventoryHoldings
 	public boolean isSeen()
 	{
 		return seen;
+	}
+
+	/** The tradeable id for an id as it appears in the container. Zero if it was not there on the last read. */
+	public int canonicalOf(int rawId)
+	{
+		Integer id = canonByRaw.get(rawId);
+		return id == null ? 0 : id;
 	}
 
 	public Map<Integer, Integer> snapshot()
@@ -47,6 +55,7 @@ public class InventoryHoldings
 			return;
 		}
 		Map<Integer, Integer> next = new HashMap<>();
+		Map<Integer, Integer> raws = new HashMap<>();
 		Item[] items = inv.getItems();
 		if (items != null)
 		{
@@ -67,9 +76,11 @@ public class InventoryHoldings
 					continue;
 				}
 				next.merge(id, item.getQuantity(), Integer::sum);
+				raws.put(raw, id);
 			}
 		}
 		qtyById = Collections.unmodifiableMap(next);
+		canonByRaw = Collections.unmodifiableMap(raws);
 		seen = true;
 	}
 

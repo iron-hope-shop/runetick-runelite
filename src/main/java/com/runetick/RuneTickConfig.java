@@ -68,8 +68,8 @@ public interface RuneTickConfig extends Config
 
 	@ConfigItem(
 		keyName = "showItemHighlights",
-		name = "Highlight flip items",
-		description = "Tag recommended and open-flip items in inventory, bank, and GE inventory",
+		name = "Tag my items",
+		description = "On items in your open flips, show the price to buy or sell at. On items you bought on the Grand Exchange and still hold, show how much the sell is up or down on what you paid",
 		position = 6
 	)
 	default boolean showItemHighlights()
@@ -266,5 +266,27 @@ public interface RuneTickConfig extends Config
 	default String siteUrl()
 	{
 		return DEFAULT_SITE_URL;
+	}
+
+	@ConfigItem(
+		keyName = "bankView",
+		name = "Bank view",
+		description = "High value marks stacks worth at least the amount below and dims the rest. To sell marks items you bought on the Grand Exchange and still hold: green sells for more than you paid, red for less",
+		position = 30
+	)
+	default BankView.Mode bankView()
+	{
+		return BankView.Mode.OFF;
+	}
+
+	@ConfigItem(
+		keyName = "bankValueMin",
+		name = "High value from (gp)",
+		description = "The smallest stack value the High value bank view marks",
+		position = 31
+	)
+	default int bankValueMin()
+	{
+		return 1_000_000;
 	}
 }
