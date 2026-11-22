@@ -5,7 +5,6 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import javax.inject.Inject;
-import net.runelite.api.Client;
 import net.runelite.api.widgets.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetItem;
@@ -24,16 +23,14 @@ public class ItemTipOverlay extends WidgetItemOverlay
 	private static final Color PLAIN = new Color(0xf4, 0xf4, 0xf5);
 	private static final Color DIM = new Color(0, 0, 0, 150);
 
-	private final Client client;
 	private final RuneTickConfig config;
 	private final RuneTickState state;
 	private final BankHoldings bankHoldings;
 	private final InventoryHoldings inventoryHoldings;
 
 	@Inject
-	public ItemTipOverlay(Client client, RuneTickConfig config, RuneTickState state, BankHoldings bankHoldings, InventoryHoldings inventoryHoldings)
+	public ItemTipOverlay(RuneTickConfig config, RuneTickState state, BankHoldings bankHoldings, InventoryHoldings inventoryHoldings)
 	{
-		this.client = client;
 		this.config = config;
 		this.state = state;
 		this.bankHoldings = bankHoldings;
@@ -82,18 +79,6 @@ public class ItemTipOverlay extends WidgetItemOverlay
 				return;
 			}
 
-			net.runelite.api.Point mouse = client.getMouseCanvasPosition();
-			boolean over = mouse != null && bounds.contains(mouse.getX(), mouse.getY());
-			if (over)
-			{
-				state.setHoverItem(id);
-				String price = state.priceLine(id);
-				if (price != null)
-				{
-					draw(graphics, bounds, price, PLAIN);
-					return;
-				}
-			}
 			if (!config.showItemHighlights())
 			{
 				return;

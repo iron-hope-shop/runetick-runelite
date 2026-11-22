@@ -95,6 +95,31 @@ public class CashTracker
 		}
 	}
 
+	/** Coins that left the bag at a deposit box, once the bank has been opened. */
+	public void applyCoinDeposit(long removed)
+	{
+		if (!bankSeen || removed <= 0)
+		{
+			return;
+		}
+		ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+		long live = bank == null ? -1 : countGp(bank);
+		long miss = DepositToBank.stillMissing(bankGp, live, removed);
+		if (miss == 0 && bank != null)
+		{
+			refreshBank();
+			return;
+		}
+		if (miss <= 0)
+		{
+			return;
+		}
+		long next = bankGp + miss;
+		bankGp = next < bankGp ? Long.MAX_VALUE / 4 : next;
+		dirty = true;
+		persist();
+	}
+
 	public void refreshBank()
 	{
 		ItemContainer bank = client.getItemContainer(InventoryID.BANK);

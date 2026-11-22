@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -25,6 +24,8 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.InventoryID;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.MenuAction;
 import net.runelite.api.events.ClientTick;
@@ -543,7 +544,6 @@ public class RuneTickPlugin extends Plugin
 		}
 	}
 
-	private final Set<Integer> priced = ConcurrentHashMap.newKeySet();
 	private final AtomicInteger searchGen = new AtomicInteger();
 	private final AtomicInteger inspectGen = new AtomicInteger();
 
@@ -1297,6 +1297,19 @@ public class RuneTickPlugin extends Plugin
 		}
 	}
 
+	private boolean depositBoxOpen()
+	{
+		try
+		{
+			Widget box = client.getWidget(InterfaceID.BankDepositbox.UNIVERSE);
+			return box != null && !box.isHidden();
+		}
+		catch (Throwable t)
+		{
+			return false;
+		}
+	}
+
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
@@ -1305,8 +1318,22 @@ public class RuneTickPlugin extends Plugin
 			int id = event.getContainerId();
 			if (id == InventoryID.INVENTORY.getId())
 			{
+				Map<Integer, Integer> beforeItems = inventoryHoldings.snapshot();
+				long beforeCoins = cashTracker.getInventoryGp();
+				boolean depositBox = depositBoxOpen();
 				cashTracker.refreshInventory();
 				inventoryHoldings.refresh(client.getItemContainer(InventoryID.INVENTORY));
+				if (depositBox)
+				{
+					long afterCoins = cashTracker.getInventoryGp();
+					if (beforeCoins > afterCoins)
+					{
+						cashTracker.applyCoinDeposit(beforeCoins - afterCoins);
+					}
+					bankHoldings.applyDeposit(
+						DepositToBank.removed(beforeItems, inventoryHoldings.snapshot()),
+						client.getItemContainer(InventoryID.BANK));
+				}
 				revalueNetWorthAndPublish();
 			}
 			else if (id == InventoryID.BANK.getId())
@@ -1330,27 +1357,6 @@ public class RuneTickPlugin extends Plugin
 	public void onClientTick(ClientTick tick)
 	{
 		runetickMenuAdded = false;
-		int hover = state.hoverItem();
-		if (hover > 0 && state.priceLine(hover) == null && priced.add(hover))
-		{
-			final int id = hover;
-			executor.submit(() ->
-			{
-				try
-				{
-					RuneTickApi.ItemQuote quote = api.getItem(id);
-					if (quote != null)
-					{
-						rememberPrice(id, quote.getBuy(), quote.getSell());
-					}
-				}
-				catch (Throwable t)
-				{
-					log.error("Hover price failed", t);
-					priced.remove(id);
-				}
-			});
-		}
 	}
 
 	@Subscribe
