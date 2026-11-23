@@ -73,6 +73,10 @@ public class RuneTickPanel extends PluginPanel
 	private final JPanel dipHost = boardHost();
 	private final JPanel flipHost = boardHost();
 	private final JPanel histHost = boardHost();
+	private final JLabel offersLabel = section("Offers");
+	private final JLabel bestLabel = section("Best to sell");
+	private final JLabel flipsLabel = section("Open flips");
+	private final JLabel fillsLabel = section("Recent fills");
 	private final JPanel col = new JPanel();
 	private final JButton connectBtn = new JButton();
 	private final JButton siteBtn = new JButton("Open site");
@@ -158,7 +162,7 @@ public class RuneTickPanel extends PluginPanel
 		actions.add(siteBtn);
 		flat(bankBtn);
 		bankBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-		bankBtn.setToolTipText("Mark items in the bank: stacks worth a lot, or Grand Exchange buys you can sell for more than you paid");
+		bankBtn.setToolTipText("In the bank: mark expensive stacks, or buys you can sell for more than you paid");
 		bankBtn.addActionListener(e ->
 		{
 			try
@@ -321,22 +325,17 @@ public class RuneTickPanel extends PluginPanel
 		col.add(Box.createVerticalStrut(2));
 		col.add(kpiMeta);
 		col.add(Box.createVerticalStrut(10));
-		col.add(section("LIVE GE"));
+		col.add(bestLabel);
+		col.add(fatHost);
+		col.add(Box.createVerticalStrut(8));
+		col.add(offersLabel);
 		col.add(liveHost);
 		col.add(Box.createVerticalStrut(8));
-		col.add(section("FLIPS"));
+		col.add(flipsLabel);
 		col.add(flipHost);
 		col.add(Box.createVerticalStrut(8));
-		col.add(section("FILLS"));
+		col.add(fillsLabel);
 		col.add(histHost);
-		col.add(Box.createVerticalStrut(8));
-		col.add(section("SELLS SOON"));
-		col.add(fatHost);
-		col.add(Box.createVerticalStrut(6));
-		JLabel hint = plain(FontManager.getRunescapeSmallFont(), MUTED);
-		hint.setText(wrap("Volume already traded in the last 15 minutes."));
-		stretch(hint);
-		col.add(hint);
 
 		JScrollPane scroll = new JScrollPane(col);
 		scroll.setBorder(null);
@@ -414,7 +413,7 @@ public class RuneTickPanel extends PluginPanel
 
 	public void setBankView(String label)
 	{
-		bankBtn.setText("Bank view: " + label);
+		bankBtn.setText("Bank: " + label);
 	}
 
 	private static void flat(JButton button)
@@ -628,7 +627,16 @@ public class RuneTickPanel extends PluginPanel
 			String bankEmpty = !s.linked
 				? "connect first"
 				: (s.bankItemsSeen ? "no board items in bank" : "open bank to scan");
-			fillBoard(liveHost, s.liveLines, s.linked ? (s.loggedIn ? "no open GE offers" : "log in") : "connect first");
+			fillBoard(liveHost, s.liveLines, s.linked ? (s.loggedIn ? "No offers open" : "Log in") : "Connect first");
+			boolean best = s.loadingBoard || (s.fatLines != null && !s.fatLines.isEmpty());
+			bestLabel.setVisible(best);
+			fatHost.setVisible(best);
+			boolean flips = s.loadingFlips || (s.flipLines != null && !s.flipLines.isEmpty());
+			flipsLabel.setVisible(flips);
+			flipHost.setVisible(flips);
+			boolean fills = s.historyLines != null && !s.historyLines.isEmpty();
+			fillsLabel.setVisible(fills);
+			histHost.setVisible(fills);
 			fillBoard(bankHost,
 				s.loadingBoard ? Collections.singletonList(BoardLine.of(0, "loading...", "", "")) : s.bankLines,
 				bankEmpty);

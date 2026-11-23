@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The sidebar leads with Best to sell, then offers, open flips, and recent fills. Empty lists stay hidden. The bank button says Bank.
+
 ### Added
 - A deposit box, after the bank has been opened once, keeps those items and coins in the saved bank total. Collecting from the Grand Exchange clerk was already in the total while the offer still held the coins or items.
 
