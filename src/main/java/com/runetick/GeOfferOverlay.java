@@ -215,7 +215,7 @@ public class GeOfferOverlay extends OverlayPanel
 			row("Filled", offer.getQuantitySold() + " / " + offer.getTotalQuantity(), MUTED, MUTED);
 		}
 
-		addOfferEta(realId, quote);
+		addOfferEta(realId, quote, offer);
 
 		return super.render(graphics);
 	}
@@ -274,8 +274,8 @@ public class GeOfferOverlay extends OverlayPanel
 			|| state == GrandExchangeOfferState.CANCELLED_BUY;
 	}
 
-	/** Show volume-based ETA when a matching open GE offer (or placed flip) has remaining qty. */
-	private void addOfferEta(int itemId, RuneTickApi.ItemQuote quote)
+	/** Desk-pace time left on the open offer (queue + round-fill odds). */
+	private void addOfferEta(int itemId, RuneTickApi.ItemQuote quote, GrandExchangeOffer offer)
 	{
 		if (!config.offerEta())
 		{
@@ -286,11 +286,24 @@ public class GeOfferOverlay extends OverlayPanel
 		{
 			return;
 		}
-		long vol = quote != null ? Math.max(0L, quote.getVolume()) : offerGuard.volumeOf(itemId);
-		String eta = OfferEta.format(remaining, vol);
+		boolean buy = offer == null || buying(offer);
+		long price = offer != null ? offer.getPrice() : 0L;
+		OfferEta.Input in = OfferEta.fromQuote(remaining, buy, price, quote);
+		if (in.volume5m <= 0)
+		{
+			in.volume5m = offerGuard.volumeOf(itemId);
+		}
+		String eta = OfferEta.format(in);
+		if (price > 0 && quote != null && quote.getBuy() > 0 && quote.getSell() > 0)
+		{
+			OfferAlert.Kind queue = buy
+				? (quote.getBuy() >= price * 1.02 ? OfferAlert.Kind.BUY_RAISE : OfferAlert.Kind.NONE)
+				: (price > quote.getSell() * 1.02 ? OfferAlert.Kind.SELL_LOWER : OfferAlert.Kind.NONE);
+			eta = OfferEta.paceLabel(queue, eta);
+		}
 		if (!eta.isEmpty())
 		{
-			row("Est. fill", eta + (vol > 0 ? " · vol " + PriceFormat.gp(vol) + "/5m" : ""), MUTED, INK);
+			row("Time left", eta, MUTED, INK);
 		}
 	}
 

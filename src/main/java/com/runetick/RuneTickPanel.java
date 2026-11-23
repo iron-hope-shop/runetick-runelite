@@ -190,11 +190,22 @@ public class RuneTickPanel extends PluginPanel
 		stretch(detail);
 		stretch(kpiMeta);
 
+		JLabel version = plain(FontManager.getRunescapeSmallFont(), MUTED);
+		String versionText = PluginVersion.text();
+		version.setText(versionText.isEmpty() ? " " : versionText);
+		stretch(version);
+
+		JPanel brand = new JPanel();
+		brand.setLayout(new BoxLayout(brand, BoxLayout.Y_AXIS));
+		brand.setOpaque(false);
+		brand.add(title);
+		brand.add(version);
+
 		JPanel head = new JPanel(new BorderLayout(8, 0));
 		head.setOpaque(false);
 		head.setAlignmentX(Component.LEFT_ALIGNMENT);
-		head.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
-		head.add(title, BorderLayout.WEST);
+		head.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+		head.add(brand, BorderLayout.WEST);
 		head.add(status, BorderLayout.EAST);
 
 		col.add(head);
@@ -861,20 +872,31 @@ public class RuneTickPanel extends PluginPanel
 		nameLbl.setText(wrap(name));
 		fitWrapped(nameLbl);
 		text.add(nameLbl);
+		long cost = paidEach != null && paidEach > 0 ? paidEach : quote.getBuy();
 		if (paidEach != null && paidEach > 0)
 		{
 			text.add(line("Paid", PriceFormat.gp(paidEach), INK));
 		}
 		else
 		{
-			text.add(line("Mkt buy", PriceFormat.gp(quote.getBuy()), INK));
+			text.add(line("Buy", PriceFormat.gp(quote.getBuy()), INK));
 		}
-		text.add(line("Mkt sell", PriceFormat.gp(quote.getSell()), INK));
-		long each = FocusCopy.eachProfit(paidEach != null && paidEach > 0 ? paidEach : quote.getBuy(), quote.getSell());
+		text.add(line("Sell", PriceFormat.gp(quote.getSell()), INK));
+		long keep = quote.getAfterTaxSell() > 0 ? quote.getAfterTaxSell() : FocusCopy.kept(quote.getSell());
+		if (keep > 0)
+		{
+			text.add(line("You keep", PriceFormat.gp(keep), INK));
+		}
+		long tax = quote.getSell() > keep ? quote.getSell() - keep : FocusCopy.taxGp(quote.getSell());
+		if (tax > 0)
+		{
+			text.add(line("Tax", PriceFormat.gp(tax), MUTED));
+		}
+		long each = FocusCopy.eachProfit(cost, quote.getSell());
 		if (each != Long.MIN_VALUE)
 		{
 			String signed = (each > 0 ? "+" : "") + PriceFormat.gp(each);
-			text.add(line(paidEach != null && paidEach > 0 ? "vs paid" : "Each", signed, each >= 0 ? GAIN : LOSS));
+			text.add(line("After sell", signed + " each", each >= 0 ? GAIN : LOSS));
 		}
 		if (quote.getHighalch() != null && quote.getHighalch() > 0)
 		{
@@ -897,13 +919,32 @@ public class RuneTickPanel extends PluginPanel
 				text.add(line("Full limit", signedQty(each, quote.getLimit()), each >= 0 ? GAIN : LOSS));
 			}
 		}
-		if (quote.getLimit() > 0)
+		if (quote.getLimit() > 0 && quote.getBuy() > 0)
 		{
-			text.add(line("Limit", PriceFormat.gp(quote.getLimit()), INK));
+			text.add(line("Cash", PriceFormat.gp(quote.getBuy() * (long) quote.getLimit()), INK));
+		}
+		RuneTickApi.Analytics analytics = quote.getAnalytics();
+		if (analytics != null)
+		{
+			Long hour = analytics.getExpectedGpPerHour();
+			if (hour != null && hour > 0)
+			{
+				text.add(line("Per hour", "+" + PriceFormat.gp(hour), GAIN));
+			}
+			int odds = FocusCopy.in10(analytics.getFillProb());
+			if (odds >= 0)
+			{
+				text.add(line("Round fill", odds + " in 10", odds >= 5 ? GAIN : MUTED));
+			}
+			String today = FocusCopy.priceToday(analytics.getZScore24h());
+			if (!today.isEmpty())
+			{
+				text.add(line("Today", today, "Above usual".equals(today) ? LOSS : "Below usual".equals(today) ? GAIN : MUTED));
+			}
 		}
 		if (quote.getVolume() > 0)
 		{
-			text.add(line("Volume", PriceFormat.gp(quote.getVolume()), INK));
+			text.add(line("Volume", PriceFormat.gp(quote.getVolume()) + " / 5m", INK));
 		}
 		JButton open = new JButton("Open on site");
 		flat(open);

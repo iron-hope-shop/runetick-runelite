@@ -227,7 +227,7 @@ public interface RuneTickConfig extends Config
 	@ConfigItem(
 		keyName = "desktopNotify",
 		name = "Desktop notifications",
-		description = "Flash / tray notify on flip updates and logged trades (works in fullscreen)",
+		description = "Master switch for tray notices. The switches below choose which events still speak",
 		position = 17
 	)
 	default boolean desktopNotify()
@@ -236,10 +236,32 @@ public interface RuneTickConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "notifyFlipUpdates",
+		name = "Notify when a flip updates",
+		description = "Tray notice when a Grand Exchange offer matches a flip you saved on the site",
+		position = 18
+	)
+	default boolean notifyFlipUpdates()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "notifyLoggedTrades",
+		name = "Notify when a fill is logged",
+		description = "Tray notice when a completed buy or sell is written to the journal",
+		position = 19
+	)
+	default boolean notifyLoggedTrades()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "offerEta",
 		name = "Offer fill ETA",
-		description = "Estimate sale/fill time from wiki 5m volume on live GE cards and GE tip",
-		position = 18
+		description = "Time left on open offers (desk pace, queue position, round-fill odds) on live cards and GE tip",
+		position = 20
 	)
 	default boolean offerEta()
 	{
@@ -249,10 +271,68 @@ public interface RuneTickConfig extends Config
 	@ConfigItem(
 		keyName = "offerPriceAlerts",
 		name = "Offer price alerts",
-		description = "Desktop notify when market moves ~2% against an open GE offer (deduped per slot)",
-		position = 19
+		description = "Desktop notice when the market moves against an open Grand Exchange offer. The next settings set how far, and which cases",
+		position = 21
 	)
 	default boolean offerPriceAlerts()
+	{
+		return true;
+	}
+
+	@Range(min = 1, max = 25)
+	@Units(Units.PERCENT)
+	@ConfigItem(
+		keyName = "offerAlertPercent",
+		name = "Offer alert at",
+		description = "How far the live price must move against your offer before a notice. 2 means two percent",
+		position = 22
+	)
+	default int offerAlertPercent()
+	{
+		return 2;
+	}
+
+	@Range(min = 0, max = 1_000_000)
+	@ConfigItem(
+		keyName = "offerMarginFloor",
+		name = "Margin floor (gp)",
+		description = "On a sell, notice when the after-tax profit per item falls under this",
+		position = 23
+	)
+	default int offerMarginFloor()
+	{
+		return 50;
+	}
+
+	@ConfigItem(
+		keyName = "alertBuyRaise",
+		name = "Buy price rose",
+		description = "Notice when the market buy climbs above your bid",
+		position = 24
+	)
+	default boolean alertBuyRaise()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "alertSellLower",
+		name = "Sell price fell",
+		description = "Notice when the market sell drops under your ask",
+		position = 25
+	)
+	default boolean alertSellLower()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "alertMarginCrush",
+		name = "Profit crushed",
+		description = "Notice when a sell no longer clears the margin floor",
+		position = 26
+	)
+	default boolean alertMarginCrush()
 	{
 		return true;
 	}
@@ -261,7 +341,7 @@ public interface RuneTickConfig extends Config
 		keyName = "siteUrl",
 		name = "Runetick address",
 		description = "Where Runetick lives. Only change this to test against a local copy, e.g. http://localhost:3002",
-		position = 20
+		position = 27
 	)
 	default String siteUrl()
 	{

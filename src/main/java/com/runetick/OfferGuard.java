@@ -55,11 +55,29 @@ public class OfferGuard
 
 	public String etaFor(int itemId, int remaining)
 	{
+		return etaFor(itemId, remaining, true, 0);
+	}
+
+	public String etaFor(int itemId, int remaining, boolean buy, long offerPrice)
+	{
 		if (!config.offerEta())
 		{
 			return "";
 		}
-		return OfferEta.format(remaining, volumeOf(itemId));
+		OfferEta.Input in = OfferEta.fromQuote(remaining, buy, offerPrice, quotes.get(itemId));
+		if (in.volume5m <= 0 && volumes.containsKey(itemId))
+		{
+			in.volume5m = volumes.get(itemId);
+		}
+		String eta = OfferEta.format(in);
+		if (offerPrice > 0 && in.marketBuy > 0 && in.marketSell > 0)
+		{
+			OfferAlert.Kind queue = buy
+				? (in.marketBuy >= offerPrice * 1.02 ? OfferAlert.Kind.BUY_RAISE : OfferAlert.Kind.NONE)
+				: (offerPrice > in.marketSell * 1.02 ? OfferAlert.Kind.SELL_LOWER : OfferAlert.Kind.NONE);
+			return OfferEta.paceLabel(queue, eta);
+		}
+		return eta;
 	}
 
 	/**
@@ -117,11 +135,16 @@ public class OfferGuard
 				continue;
 			}
 			RuneTickApi.ItemQuote q = fetched.getOrDefault(o.getItemId(), quotes.get(o.getItemId()));
-			long vol = q == null ? volumeOf(o.getItemId()) : Math.max(0L, q.getVolume());
 			int remaining = Math.max(0, o.getTotal() - o.getFilled());
-			String eta = etaOn ? OfferEta.format(remaining, vol) : "";
 
 			boolean buy = !"sell".equalsIgnoreCase(o.getSide());
+			String eta = "";
+			if (etaOn)
+			{
+				OfferEta.Input in = OfferEta.fromQuote(remaining, buy, o.getPrice(), q);
+				eta = OfferEta.format(in);
+			}
+
 			long mktBuy = q == null ? 0 : q.getBuy();
 			long mktSell = q == null ? 0 : q.getSell();
 			long afterTax = q == null ? 0 : q.getAfterTaxSell();
@@ -134,7 +157,17 @@ public class OfferGuard
 					costBasis = o.getSpent() / o.getFilled();
 				}
 			}
-			OfferAlert.Kind kind = OfferAlert.classify(buy, o.getPrice(), mktBuy, mktSell, afterTax, costBasis);
+			int pct = config.offerAlertPercent();
+			if (pct < 1) pct = 2;
+			long floor = config.offerMarginFloor();
+			OfferAlert.Kind kind = OfferAlert.classify(buy, o.getPrice(), mktBuy, mktSell, afterTax, costBasis, pct, floor);
+			if (kind == OfferAlert.Kind.BUY_RAISE && !config.alertBuyRaise()) kind = OfferAlert.Kind.NONE;
+			if (kind == OfferAlert.Kind.SELL_LOWER && !config.alertSellLower()) kind = OfferAlert.Kind.NONE;
+			if (kind == OfferAlert.Kind.MARGIN_CRUSH && !config.alertMarginCrush()) kind = OfferAlert.Kind.NONE;
+			if (etaOn)
+			{
+				eta = OfferEta.paceLabel(kind, eta);
+			}
 			String fp = OfferAlert.fingerprint(o.getSlot(), o.getItemId(), kind);
 			if (alertsOn && kind != OfferAlert.Kind.NONE)
 			{

@@ -33,32 +33,38 @@ public final class OfferAlert
 	public static Kind classify(boolean buy, long offerPrice, long marketBuy, long marketSell,
 		long afterTaxSell, long costBasis)
 	{
+		return classify(buy, offerPrice, marketBuy, marketSell, afterTaxSell, costBasis, 2, MARGIN_FLOOR_GP);
+	}
+
+	/**
+	 * @param adversePct  how far the market must move against the offer, 1 to 25
+	 * @param marginFloor after-tax gold per item below which a sell is called crushed
+	 */
+	public static Kind classify(boolean buy, long offerPrice, long marketBuy, long marketSell,
+		long afterTaxSell, long costBasis, int adversePct, long marginFloor)
+	{
 		if (offerPrice <= 0)
 		{
 			return Kind.NONE;
 		}
+		int pct = Math.max(1, Math.min(25, adversePct));
+		long move = Math.max(1L, offerPrice * pct / 100L);
 		if (buy)
 		{
-			// market buy ≥ bid × 1.02
-			if (marketBuy > 0 && marketBuy * 100L >= offerPrice * 102L)
+			if (marketBuy > 0 && marketBuy >= offerPrice + move)
 			{
 				return Kind.BUY_RAISE;
 			}
 		}
 		else
 		{
-			// market sell ≤ ask × 0.98
-			if (marketSell > 0 && marketSell * 100L <= offerPrice * 98L)
+			if (marketSell > 0 && marketSell <= offerPrice - move)
 			{
 				return Kind.SELL_LOWER;
 			}
-			if (costBasis > 0 && afterTaxSell > 0)
+			if (costBasis > 0 && afterTaxSell > 0 && afterTaxSell - costBasis < marginFloor)
 			{
-				long margin = afterTaxSell - costBasis;
-				if (margin < MARGIN_FLOOR_GP)
-				{
-					return Kind.MARGIN_CRUSH;
-				}
+				return Kind.MARGIN_CRUSH;
 			}
 		}
 		return Kind.NONE;

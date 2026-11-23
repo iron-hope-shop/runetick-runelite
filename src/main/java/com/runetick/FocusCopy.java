@@ -48,6 +48,54 @@ final class FocusCopy
 			+ PriceFormat.gp(d.getMedian30());
 	}
 
+	/** Gold the tax takes off a sell. */
+	static long taxGp(long sell)
+	{
+		if (sell < 50)
+		{
+			return 0;
+		}
+		return Math.min(5_000_000L, sell * 2 / 100);
+	}
+
+	/** What a sell keeps after tax. */
+	static long kept(long sell)
+	{
+		if (sell <= 0)
+		{
+			return 0;
+		}
+		return sell - taxGp(sell);
+	}
+
+	/** 0–10, or -1 when the odds are missing. */
+	static int in10(Double probability)
+	{
+		if (probability == null || probability.isNaN())
+		{
+			return -1;
+		}
+		return (int) Math.max(0, Math.min(10, Math.round(probability * 10)));
+	}
+
+	/** One line for where the price sits versus the last day. */
+	static String priceToday(Double zScore)
+	{
+		if (zScore == null || zScore.isNaN())
+		{
+			return "";
+		}
+		if (zScore <= -1)
+		{
+			return "Below usual";
+		}
+		if (zScore >= 1)
+		{
+			return "Above usual";
+		}
+		return "About usual";
+	}
+
 	/** After-tax profit on one item. {@link Long#MIN_VALUE} when a price is missing. */
 	static long eachProfit(long buy, long sell)
 	{
@@ -55,12 +103,7 @@ final class FocusCopy
 		{
 			return Long.MIN_VALUE;
 		}
-		long net = sell;
-		if (sell >= 50)
-		{
-			net = sell - Math.min(5_000_000L, sell * 2 / 100);
-		}
-		return net - buy;
+		return kept(sell) - buy;
 	}
 
 	static String fatWhy(RuneTickApi.FatSpread f)

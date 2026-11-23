@@ -33,7 +33,11 @@ dependencies {
 }
 
 group = 'com.runetick'
-version = '0.4.22'
+version = '0.4.23'
+
+processResources {
+	from('runelite-plugin.properties')
+}
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
@@ -42,7 +46,6 @@ tasks.withType(JavaCompile).configureEach {
 
 jar {
 	archiveBaseName.set('runetick-plugin')
-	from('runelite-plugin.properties')
 	manifest {
 		attributes(
 			'Plugin-Version': version,

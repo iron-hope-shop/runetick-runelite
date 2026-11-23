@@ -388,10 +388,12 @@ public class RuneTickPlugin extends Plugin
 				{
 					rem = Math.max(0, flip.getUnits() - flip.getBought());
 				}
-				String eta = offerGuard.etaFor(flip.getItemId(), rem);
+				boolean sellLeg = "selling".equals(flip.getStatus());
+				long legPrice = sellLeg ? flip.getAsk() : flip.getBid();
+				String eta = offerGuard.etaFor(flip.getItemId(), rem, !sellLeg, legPrice);
 				if (!eta.isEmpty())
 				{
-					total = total + " · eta " + eta;
+					total = total + " · left " + eta;
 				}
 			}
 			if (bankQty > 0)
@@ -473,7 +475,7 @@ public class RuneTickPlugin extends Plugin
 			String mid = (sell ? "Sell" : "Buy")
 				+ " " + row.filled + "/" + row.total
 				+ " @ " + PriceFormat.gpCompact(row.price);
-			String total = row.eta.isEmpty() ? "" : ("eta " + row.eta);
+			String total = row.eta.isEmpty() ? "" : ("left " + row.eta);
 			if (sell)
 			{
 				CostBasis.Open paid = CostBasis.openBuys(geHistory.all(), row.itemId);
@@ -1569,14 +1571,14 @@ public class RuneTickPlugin extends Plugin
 			{
 				String msg = "Updated your " + itemName + " flip";
 				panel.showMessage(msg);
-				notifyDesktop(msg);
+				if (config.notifyFlipUpdates()) notifyDesktop(msg);
 				refreshFlips();
 			}
 			else if (result == OfferSync.Result.TRADE_LOGGED)
 			{
 				String msg = "Logged " + (offerEvent.isBuy() ? "buy" : "sell") + ": " + itemName;
 				panel.showMessage(msg);
-				notifyDesktop(msg);
+				if (config.notifyLoggedTrades()) notifyDesktop(msg);
 			}
 		}
 		catch (FirebaseSession.NotLinkedException e)

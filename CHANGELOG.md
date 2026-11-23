@@ -6,9 +6,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Offer time-left uses the same desk pace as gp/h (10% volume share + 4h limit), your price vs the live queue, and round-fill odds. Off-queue offers show "not filling". Panel label is Round fill (probability), not a clock.
+
+## [0.4.23] - 2026-11-23
+
+### Changed
 - The sidebar leads with Best to sell, then offers, open flips, and recent fills. Empty lists stay hidden. The bank button says Bank.
 
 ### Added
+- The sidebar shows the plugin version under the Runetick name.
+- An item card shows what a sell keeps after tax, the profit on one, 10, 100, and a full limit, plus gold per hour, fill odds, and whether the price is usual today.
+- Plugin settings choose which desktop notices fire, how many percent the market must move against an offer, and the gold floor for a crushed profit.
 - A deposit box, after the bank has been opened once, keeps those items and coins in the saved bank total. Collecting from the Grand Exchange clerk was already in the total while the offer still held the coins or items.
 
 ### Added

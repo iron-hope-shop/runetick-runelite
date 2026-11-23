@@ -16,6 +16,18 @@ public class FocusCopyTest
 	}
 
 	@Test
+	public void namesTheAfterSellOddsAndTheDay()
+	{
+		assertEquals(24L, FocusCopy.taxGp(1200));
+		assertEquals(1176L, FocusCopy.kept(1200));
+		assertEquals(5, FocusCopy.in10(0.46));
+		assertEquals(-1, FocusCopy.in10(null));
+		assertEquals("Below usual", FocusCopy.priceToday(-1.2));
+		assertEquals("About usual", FocusCopy.priceToday(0.2));
+		assertEquals("Above usual", FocusCopy.priceToday(1.4));
+	}
+
+	@Test
 	public void dipAskTargetsTwentyPercentAfterTax()
 	{
 		assertEquals(1224, FocusCopy.dipAsk(1000));

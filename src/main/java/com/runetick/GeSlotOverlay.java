@@ -95,8 +95,11 @@ public class GeSlotOverlay extends Overlay
 		RuneTickApi.ItemQuote quote = offerGuard.quoteOf(offer.getItemId());
 		if (quote != null)
 		{
+			int pct = config.offerAlertPercent();
+			if (pct < 1) pct = 2;
 			OfferAlert.Kind kind = OfferAlert.classify(
-				buy, offer.getPrice(), quote.getBuy(), quote.getSell(), quote.getAfterTaxSell(), 0);
+				buy, offer.getPrice(), quote.getBuy(), quote.getSell(), quote.getAfterTaxSell(), 0,
+				pct, config.offerMarginFloor());
 			if (kind == OfferAlert.Kind.BUY_RAISE || kind == OfferAlert.Kind.SELL_LOWER)
 			{
 				glyph = "\u00b1";

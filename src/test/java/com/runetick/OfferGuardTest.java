@@ -26,6 +26,11 @@ public class OfferGuardTest
 		when(config.offerEta()).thenReturn(true);
 		when(config.offerPriceAlerts()).thenReturn(true);
 		when(config.desktopNotify()).thenReturn(true);
+		when(config.offerAlertPercent()).thenReturn(2);
+		when(config.offerMarginFloor()).thenReturn(50);
+		when(config.alertBuyRaise()).thenReturn(true);
+		when(config.alertSellLower()).thenReturn(true);
+		when(config.alertMarginCrush()).thenReturn(true);
 		guard = new OfferGuard(api, config);
 	}
 
@@ -39,6 +44,7 @@ public class OfferGuardTest
 		quote.setSell(1000);
 		quote.setAfterTaxSell(980);
 		quote.setVolume(5);
+		quote.setLimit(70);
 		when(api.getItem(4151)).thenReturn(quote);
 
 		RuneTickApi.GeLiveOffer offer = new RuneTickApi.GeLiveOffer();
@@ -54,7 +60,7 @@ public class OfferGuardTest
 		guard.poll(Collections.singletonList(offer), msg -> notifies.incrementAndGet());
 		assertEquals(1, notifies.get());
 		assertEquals(1, guard.getLiveRows().size());
-		assertEquals("~1h", guard.getLiveRows().get(0).eta);
+		assertEquals("not filling", guard.getLiveRows().get(0).eta);
 		assertEquals(OfferAlert.Kind.BUY_RAISE, guard.getLiveRows().get(0).alert);
 
 		// Same adverse condition — no second notify.
@@ -72,7 +78,10 @@ public class OfferGuardTest
 	{
 		RuneTickApi.ItemQuote quote = new RuneTickApi.ItemQuote();
 		quote.setId(1);
+		quote.setBuy(100);
+		quote.setSell(105);
 		quote.setVolume(10);
+		quote.setLimit(1000);
 		when(api.getItem(anyInt())).thenReturn(quote);
 
 		RuneTickApi.GeLiveOffer offer = new RuneTickApi.GeLiveOffer();
@@ -85,7 +94,7 @@ public class OfferGuardTest
 		offer.setFilled(0);
 
 		guard.poll(Collections.singletonList(offer), msg -> { });
-		assertEquals("~1h", guard.etaFor(1, 120));
+		assertEquals("~10h", guard.etaFor(1, 120, false, 100));
 	}
 
 	@Test
