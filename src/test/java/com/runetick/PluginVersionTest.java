@@ -8,6 +8,6 @@ public class PluginVersionTest
 	@Test
 	public void readsThePluginProperties()
 	{
-		assertEquals("0.4.23", PluginVersion.text());
+		assertEquals("0.4.24", PluginVersion.text());
 	}
 }

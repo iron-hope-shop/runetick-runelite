@@ -135,6 +135,8 @@ public class RuneTickApi
 		private long bankGp;
 		private boolean bankSeen;
 		private long geSyncedAt;
+		/** Journal cutover from the website. Null means show and sync all GE history. */
+		private Long historyFrom;
 	}
 
 	/** A recommended flip from /v1/plan. bid/ask are the prices to place. */

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Offer time-left uses the same desk pace as gp/h (10% volume share + 4h limit), your price vs the live queue, and round-fill odds. Off-queue offers show "not filling". Panel label is Round fill (probability), not a clock.
 
+## [0.4.24] - 2026-11-24
+### Fixed
+- After Reset on the website journal, the next sync clears the hist board of older fills and rebases SESSION gain from the current net worth.
+
 ## [0.4.23] - 2026-11-23
 
 ### Changed

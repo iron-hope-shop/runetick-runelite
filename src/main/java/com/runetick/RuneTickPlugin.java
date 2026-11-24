@@ -274,7 +274,7 @@ public class RuneTickPlugin extends Plugin
 		state.setCash(cashTracker.getInventoryGp(), cashTracker.getBankGp(), cashTracker.isBankSeen());
 		if (config.showGeHistory())
 		{
-			state.setRecentTrades(geHistory.recent(8));
+			state.setRecentTrades(JournalCutover.after(geHistory.recent(200), state.getHistoryFrom(), 8));
 		}
 		else
 		{
@@ -1045,6 +1045,14 @@ public class RuneTickPlugin extends Plugin
 			RuneTickApi.SyncResult result = api.syncLocal(inv, bank, bankSeen, trades, names, geOffers, netWorth);
 			lastSyncFingerprint.set(fingerprint);
 			nextSyncAllowedAt.set(System.currentTimeMillis() + SYNC_MIN_GAP_MS);
+			Long previousCutover = state.getHistoryFrom();
+			Long nextCutover = result.getHistoryFrom();
+			state.setHistoryFrom(nextCutover);
+			if (JournalCutover.journalReset(previousCutover, nextCutover))
+			{
+				netWorthTracker.rebaseSession();
+				publishLocalSnapshot();
+			}
 			int live = geOffers == null ? 0 : geOffers.size();
 			String msg;
 			if (result.getAdded() > 0)

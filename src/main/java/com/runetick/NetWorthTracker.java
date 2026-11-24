@@ -63,6 +63,14 @@ public class NetWorthTracker
 		// Keep last bankItemsGp — bank scan persists across logout like CashTracker.
 	}
 
+	/** Start the session clock again from the current total (after a website journal reset). */
+	public void rebaseSession()
+	{
+		sessionBaseline = null;
+		sessionArmed = false;
+		armSessionIfReady();
+	}
+
 	public NetWorth snapshot()
 	{
 		long total = totalNow();

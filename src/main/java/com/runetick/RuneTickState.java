@@ -32,6 +32,8 @@ public class RuneTickState
 	private volatile long bankGp;
 	private volatile boolean bankSeen;
 	private volatile List<GeTrade> recentTrades = Collections.emptyList();
+	/** Website journal cutover (epoch ms). Null = show full local GE history. */
+	private volatile Long historyFrom;
 	private volatile boolean loadingBoard;
 	private volatile boolean loadingFlips;
 	private volatile boolean syncing;
@@ -80,6 +82,7 @@ public class RuneTickState
 			geItem = null;
 			geItemId = 0;
 			recentTrades = Collections.emptyList();
+			historyFrom = null;
 			loadingBoard = false;
 			loadingFlips = false;
 			syncing = false;
@@ -182,6 +185,16 @@ public class RuneTickState
 	public void setRecentTrades(List<GeTrade> trades)
 	{
 		this.recentTrades = trades == null ? Collections.emptyList() : trades;
+	}
+
+	public Long getHistoryFrom()
+	{
+		return historyFrom;
+	}
+
+	public void setHistoryFrom(Long historyFrom)
+	{
+		this.historyFrom = historyFrom;
 	}
 
 	public List<RuneTickApi.PlacedFlip> getPlaced()
