@@ -7,7 +7,7 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Estimates net worth: known cash + GE prices for inventory/bank items + open GE offers.
+ * Estimates net worth: known cash + GE prices for bag, worn and bank items + what open GE offers hold.
  *
  * <p>Session delta only starts after inventory <em>and</em> bank have been scanned, so discovering
  * bank wealth mid-login is not counted as profit. GE offer moves after that still count.
@@ -20,8 +20,10 @@ public class NetWorthTracker
 	private final CashTracker cashTracker;
 	private final InventoryHoldings inventoryHoldings;
 	private final BankHoldings bankHoldings;
+	private final WornHoldings wornHoldings;
 
 	private volatile long invItemsGp;
+	private volatile long wornGp;
 	private volatile long bankItemsGp;
 	private volatile long offersGp;
 	private volatile Long sessionBaseline;
@@ -33,23 +35,23 @@ public class NetWorthTracker
 		ItemManager itemManager,
 		CashTracker cashTracker,
 		InventoryHoldings inventoryHoldings,
-		BankHoldings bankHoldings)
+		BankHoldings bankHoldings,
+		WornHoldings wornHoldings)
 	{
 		this.client = client;
 		this.itemManager = itemManager;
 		this.cashTracker = cashTracker;
 		this.inventoryHoldings = inventoryHoldings;
 		this.bankHoldings = bankHoldings;
+		this.wornHoldings = wornHoldings;
 	}
 
 	/** Reprice holdings + GE offers. Call on the client thread. */
 	public void revalue()
 	{
 		invItemsGp = ItemValue.estimate(inventoryHoldings.snapshot(), this::price);
-		if (bankHoldings.isSeen())
-		{
-			bankItemsGp = ItemValue.estimate(bankHoldings.snapshot(), this::price);
-		}
+		wornGp = ItemValue.estimate(wornHoldings.snapshot(), this::price);
+		bankItemsGp = bankHoldings.isSeen() ? ItemValue.estimate(bankHoldings.snapshot(), this::price) : 0;
 		offersGp = OfferValue.estimate(safeOffers(), this::price);
 		armSessionIfReady();
 	}
@@ -60,10 +62,18 @@ public class NetWorthTracker
 		sessionArmed = false;
 		offersGp = 0;
 		invItemsGp = 0;
+		wornGp = 0;
 		// Keep last bankItemsGp — bank scan persists across logout like CashTracker.
 	}
 
-	/** Start the session clock again from the current total (after a website journal reset). */
+	/** A different character logged in: nothing from the last one carries over. */
+	public void onAccountChange()
+	{
+		onLogout();
+		bankItemsGp = 0;
+	}
+
+	/** Start the session clock again from the current total (after a website journal reset, or when the bank is put in or left out). */
 	public void rebaseSession()
 	{
 		sessionBaseline = null;
@@ -79,9 +89,11 @@ public class NetWorthTracker
 			cashTracker.getTotalKnownGp(),
 			cashTracker.getInventoryGp(),
 			invItemsGp,
+			wornGp,
 			bankItemsGp,
 			offersGp,
 			bankHoldings.isSeen(),
+			cashTracker.isCountBank(),
 			delta,
 			sessionArmed);
 	}
@@ -103,7 +115,7 @@ public class NetWorthTracker
 			return;
 		}
 		// Need a full picture: bag items scanned + bank opened at least once this install/session.
-		if (!SessionDelta.ready(inventoryHoldings.isSeen(), bankHoldings.isSeen()))
+		if (!SessionDelta.ready(inventoryHoldings.isSeen(), bankHoldings.isSeen(), cashTracker.isCountBank()))
 		{
 			return;
 		}
@@ -113,10 +125,8 @@ public class NetWorthTracker
 
 	private long totalNow()
 	{
-		long cash = cashTracker.getTotalKnownGp();
-		long items = invItemsGp + (bankHoldings.isSeen() ? bankItemsGp : 0);
-		long total = cash + items + offersGp;
-		return total < 0 ? Long.MAX_VALUE / 4 : total;
+		return new NetWorth(cashTracker.getTotalKnownGp(), cashTracker.getInventoryGp(), invItemsGp, wornGp, bankItemsGp, offersGp,
+			bankHoldings.isSeen(), cashTracker.isCountBank(), 0, false).totalGp;
 	}
 
 	private GrandExchangeOffer[] safeOffers()

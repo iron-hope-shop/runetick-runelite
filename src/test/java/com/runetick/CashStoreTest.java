@@ -31,4 +31,27 @@ public class CashStoreTest
 		assertTrue(snap.isBankSeen());
 		assertTrue(snap.getSavedAt() > 0);
 	}
+
+	@Test
+	public void eachCharacterHasItsOwnCashAndBankAndTheOldFileGoesToTheFirstOne() throws Exception
+	{
+		Path dir = tmp.newFolder("chars").toPath();
+		PluginFiles files = new PluginFiles();
+		files.use(Filepath.Unchecked.getRooted(dir));
+		CashStore store = new CashStore(files, new Gson());
+		store.save(5, 7_000_000, true);
+		store.useAccount(111L);
+		CashStore.Snapshot main = store.load();
+		assertEquals(7_000_000, main.getBankGp());
+		assertTrue(files.file("cash-111.json").exists());
+		assertTrue(!files.file("cash.json").exists());
+		store.saveBankItems(java.util.Collections.singletonMap(4151, 2));
+		assertEquals(Integer.valueOf(2), store.loadBankItems().get(4151));
+		store.useAccount(222L);
+		assertEquals(null, store.load());
+		assertEquals(null, store.loadBankItems());
+		store.save(1, 2, true);
+		store.useAccount(111L);
+		assertEquals(7_000_000, store.load().getBankGp());
+	}
 }

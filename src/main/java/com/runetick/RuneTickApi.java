@@ -111,8 +111,10 @@ public class RuneTickApi
 		private long cashGp;
 		private long inventoryCashGp;
 		private long invItemsGp;
+		private long wornGp;
 		private long bankItemsGp;
 		private long offersGp;
+		private boolean bankExcluded;
 		/** Inv cash + inv items + GE offers (no bank). */
 		private long invGeGp;
 		private long totalGp;
@@ -533,10 +535,27 @@ public class RuneTickApi
 		List<GeTrade> trades, Map<Integer, String> names,
 		List<GeLiveOffer> geOffers, NetWorthSnap netWorth) throws IOException
 	{
+		return syncLocal(inventoryGp, bankGp, bankSeen, trades, names, geOffers, netWorth, true, true);
+	}
+
+	/**
+	 * @param sendWealth false sends no gold and no net worth
+	 * @param sendBank false sends no bank gold; the net worth says the bank was left out
+	 */
+	public SyncResult syncLocal(long inventoryGp, long bankGp, boolean bankSeen,
+		List<GeTrade> trades, Map<Integer, String> names,
+		List<GeLiveOffer> geOffers, NetWorthSnap netWorth, boolean sendWealth, boolean sendBank) throws IOException
+	{
 		JsonObject body = new JsonObject();
-		body.addProperty("inventoryGp", Math.max(0, inventoryGp));
-		body.addProperty("bankGp", Math.max(0, bankGp));
-		body.addProperty("bankSeen", bankSeen);
+		if (sendWealth)
+		{
+			body.addProperty("inventoryGp", Math.max(0, inventoryGp));
+			if (sendBank)
+			{
+				body.addProperty("bankGp", Math.max(0, bankGp));
+				body.addProperty("bankSeen", bankSeen);
+			}
+		}
 		JsonArray arr = new JsonArray();
 		if (trades != null)
 		{
@@ -584,17 +603,19 @@ public class RuneTickApi
 		}
 		body.add("geOffers", offers);
 
-		if (netWorth != null)
+		if (sendWealth && netWorth != null)
 		{
 			JsonObject nw = new JsonObject();
 			nw.addProperty("cashGp", Math.max(0, netWorth.getCashGp()));
 			nw.addProperty("inventoryCashGp", Math.max(0, netWorth.getInventoryCashGp()));
 			nw.addProperty("invItemsGp", Math.max(0, netWorth.getInvItemsGp()));
-			nw.addProperty("bankItemsGp", Math.max(0, netWorth.getBankItemsGp()));
+			nw.addProperty("wornGp", Math.max(0, netWorth.getWornGp()));
+			nw.addProperty("bankExcluded", !sendBank || netWorth.isBankExcluded());
+			nw.addProperty("bankItemsGp", sendBank ? Math.max(0, netWorth.getBankItemsGp()) : 0);
 			nw.addProperty("offersGp", Math.max(0, netWorth.getOffersGp()));
 			nw.addProperty("invGeGp", Math.max(0, netWorth.getInvGeGp()));
 			nw.addProperty("totalGp", Math.max(0, netWorth.getTotalGp()));
-			nw.addProperty("bankItemsSeen", netWorth.isBankItemsSeen());
+			nw.addProperty("bankItemsSeen", sendBank && netWorth.isBankItemsSeen());
 			nw.addProperty("sessionDeltaGp", netWorth.getSessionDeltaGp());
 			nw.addProperty("sessionArmed", netWorth.isSessionArmed());
 			nw.addProperty("at", netWorth.getAt() > 0 ? netWorth.getAt() : System.currentTimeMillis());

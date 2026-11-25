@@ -21,15 +21,42 @@ public class BankHoldings
 	private static final int PLATINUM = ItemID.PLATINUM_TOKEN;
 
 	private final ItemManager itemManager;
+	private final CashStore store;
 
 	private volatile Map<Integer, Integer> qtyById = Collections.emptyMap();
 	private volatile Map<Integer, Integer> canonByRaw = Collections.emptyMap();
 	private volatile boolean seen;
 
 	@Inject
-	public BankHoldings(ItemManager itemManager)
+	public BankHoldings(ItemManager itemManager, CashStore store)
 	{
 		this.itemManager = itemManager;
+		this.store = store;
+	}
+
+	/** Load the last bank this character showed. Call after the store has switched to the character. */
+	public void useAccount()
+	{
+		Map<Integer, Integer> saved = store.loadBankItems();
+		qtyById = saved == null ? Collections.emptyMap() : Collections.unmodifiableMap(saved);
+		canonByRaw = Collections.emptyMap();
+		seen = saved != null;
+	}
+
+	private void save(Map<Integer, Integer> next, Map<Integer, Integer> before)
+	{
+		if (next.equals(before))
+		{
+			return;
+		}
+		try
+		{
+			store.saveBankItems(next);
+		}
+		catch (Throwable t)
+		{
+			// The bank is still right in memory; it is only not remembered across a restart.
+		}
 	}
 
 	public boolean isSeen()
@@ -103,12 +130,14 @@ public class BankHoldings
 		{
 			return;
 		}
-		Map<Integer, Integer> next = new HashMap<>(qtyById);
+		Map<Integer, Integer> before = qtyById;
+		Map<Integer, Integer> next = new HashMap<>(before);
 		for (Map.Entry<Integer, Integer> e : add.entrySet())
 		{
 			next.merge(e.getKey(), e.getValue(), Integer::sum);
 		}
 		qtyById = Collections.unmodifiableMap(next);
+		save(next, before);
 	}
 
 	/** Call on the client thread while the bank container is available. */
@@ -120,7 +149,9 @@ public class BankHoldings
 		}
 		Map<Integer, Integer> next = quantities(bank);
 		Map<Integer, Integer> raws = rawCanonical(bank);
+		Map<Integer, Integer> before = qtyById;
 		qtyById = Collections.unmodifiableMap(next);
+		save(next, before);
 		canonByRaw = Collections.unmodifiableMap(raws);
 		seen = true;
 	}

@@ -58,10 +58,42 @@ public class CashTracker
 		return savedAt;
 	}
 
-	/** Inventory + last-seen bank (0 bank until opened once, then persists). */
+	/** Inventory + last-seen bank (0 bank until opened once, then persists). Bank is left out when the player says so. */
 	public long getTotalKnownGp()
 	{
-		return inventoryGp + (bankSeen ? bankGp : 0);
+		return inventoryGp + (bankSeen && countBank ? bankGp : 0);
+	}
+
+	private volatile boolean countBank = true;
+	private volatile long account = Long.MIN_VALUE;
+
+	public void setCountBank(boolean countBank)
+	{
+		this.countBank = countBank;
+	}
+
+	public boolean isCountBank()
+	{
+		return countBank;
+	}
+
+	/** Switch to this character's last-known cash. Returns true when the character changed. */
+	public boolean useAccount(long accountHash)
+	{
+		if (accountHash == account)
+		{
+			return false;
+		}
+		persist();
+		account = accountHash;
+		store.useAccount(accountHash);
+		inventoryGp = 0;
+		bankGp = 0;
+		bankSeen = false;
+		savedAt = 0;
+		dirty = false;
+		restore();
+		return true;
 	}
 
 	public void restore()
@@ -98,7 +130,7 @@ public class CashTracker
 	/** Coins that left the bag at a deposit box, once the bank has been opened. */
 	public void applyCoinDeposit(long removed)
 	{
-		if (!bankSeen || removed <= 0)
+		if (!countBank || !bankSeen || removed <= 0)
 		{
 			return;
 		}
@@ -122,6 +154,10 @@ public class CashTracker
 
 	public void refreshBank()
 	{
+		if (!countBank)
+		{
+			return;
+		}
 		ItemContainer bank = client.getItemContainer(InventoryID.BANK);
 		if (bank == null)
 		{

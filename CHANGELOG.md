@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.25] - 2026-11-25
+### Fixed
+- Wealth no longer counts Grand Exchange fills twice. A running offer counts only what is still on the exchange: coins locked on an unfilled buy, or items not yet sold. A finished or cancelled slot counts everything it holds, including the coins refunded on a buy that filled below its price.
+- Worn gear counts in wealth.
+- Each character has its own gold and bank. Logging in on an alt no longer shows the main's bank.
+- The bank items are remembered across a restart, like bank gold, so wealth does not drop until the bank is opened again.
+
+### Added
+- Count the bank (on by default). Off leaves bank gold and bank items out of wealth and out of everything sent to the website.
+- Send wealth to the website (on by default). Off keeps gold and net worth on this computer; trades and live slots still sync.
+- Show net worth is now called Track wealth. Off stops tracking wealth at all.
+
 ### Changed
 - Offer time-left uses the same desk pace as gp/h (10% volume share + 4h limit), your price vs the live queue, and round-fill odds. Off-queue offers show "not filling". Panel label is Round fill (probability), not a clock.
 

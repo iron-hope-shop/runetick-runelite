@@ -38,6 +38,7 @@ import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
@@ -95,6 +96,9 @@ public class RuneTickPlugin extends Plugin
 
 	@Inject
 	private ConfigManager configManager;
+
+	@Inject
+	private WornHoldings wornHoldings;
 
 	@Inject
 	private ScheduledExecutorService executor;
@@ -177,6 +181,7 @@ public class RuneTickPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
+		cashTracker.setCountBank(config.countBank());
 		pluginFiles.use(getPluginDirectory());
 		tracker.reset();
 
@@ -1020,6 +1025,8 @@ public class RuneTickPlugin extends Plugin
 		snap.setCashGp(worth.cashGp);
 		snap.setInventoryCashGp(worth.inventoryCashGp);
 		snap.setInvItemsGp(worth.invItemsGp);
+		snap.setWornGp(worth.wornGp);
+		snap.setBankExcluded(!worth.bankCounted);
 		snap.setBankItemsGp(worth.bankItemsGp);
 		snap.setOffersGp(worth.offersGp);
 		snap.setInvGeGp(worth.invGeGp);
@@ -1042,7 +1049,8 @@ public class RuneTickPlugin extends Plugin
 		refreshPanelSnapshot();
 		try
 		{
-			RuneTickApi.SyncResult result = api.syncLocal(inv, bank, bankSeen, trades, names, geOffers, netWorth);
+			boolean wealth = config.sendWealth() && config.showNetWorth();
+			RuneTickApi.SyncResult result = api.syncLocal(inv, bank, bankSeen, trades, names, geOffers, wealth ? netWorth : null, wealth, config.countBank());
 			lastSyncFingerprint.set(fingerprint);
 			nextSyncAllowedAt.set(System.currentTimeMillis() + SYNC_MIN_GAP_MS);
 			Long previousCutover = state.getHistoryFrom();
@@ -1108,6 +1116,10 @@ public class RuneTickPlugin extends Plugin
 	{
 		StringBuilder sb = new StringBuilder();
 		sb.append(inv).append(':').append(bank).append(':').append(bankSeen).append('|');
+		if (netWorth != null)
+		{
+			sb.append(netWorth.getWornGp()).append(':').append(netWorth.isBankExcluded()).append('|');
+		}
 		if (trades != null)
 		{
 			for (GeTrade t : trades)
@@ -1326,7 +1338,12 @@ public class RuneTickPlugin extends Plugin
 		try
 		{
 			int id = event.getContainerId();
-			if (id == InventoryID.INVENTORY.getId())
+			if (id == InventoryID.EQUIPMENT.getId())
+			{
+				wornHoldings.refresh(client.getItemContainer(InventoryID.EQUIPMENT));
+				revalueNetWorthAndPublish();
+			}
+			else if (id == InventoryID.INVENTORY.getId())
 			{
 				Map<Integer, Integer> beforeItems = inventoryHoldings.snapshot();
 				long beforeCoins = cashTracker.getInventoryGp();
@@ -1475,6 +1492,55 @@ public class RuneTickPlugin extends Plugin
 		}
 	}
 
+	/** Client thread: switch cash, bank and session to the character now logged in. */
+	private void useAccount()
+	{
+		long hash;
+		try
+		{
+			hash = client.getAccountHash();
+		}
+		catch (Throwable t)
+		{
+			return;
+		}
+		if (hash == -1)
+		{
+			return;
+		}
+		cashTracker.setCountBank(config.countBank());
+		if (cashTracker.useAccount(hash))
+		{
+			bankHoldings.useAccount();
+			netWorthTracker.onAccountChange();
+			lastSyncFingerprint.set("");
+		}
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!RuneTickConfig.GROUP.equals(event.getGroup()))
+		{
+			return;
+		}
+		String key = event.getKey();
+		if ("countBank".equals(key) || "sendWealth".equals(key) || "showNetWorth".equals(key))
+		{
+			clientThread.invokeLater(() ->
+			{
+				cashTracker.setCountBank(config.countBank());
+				if ("countBank".equals(key))
+				{
+					netWorthTracker.rebaseSession();
+				}
+				revalueNetWorthAndPublish();
+				lastSyncFingerprint.set("");
+				requestLocalSync();
+			});
+		}
+	}
+
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
@@ -1503,8 +1569,10 @@ public class RuneTickPlugin extends Plugin
 		else if (gs == GameState.LOGGED_IN)
 		{
 			state.setSyncStatus(state.isLinked() ? "syncing..." : "");
+			useAccount();
 			cashTracker.refreshInventory();
 			inventoryHoldings.refresh(client.getItemContainer(InventoryID.INVENTORY));
+			wornHoldings.refresh(client.getItemContainer(InventoryID.EQUIPMENT));
 			state.setCash(cashTracker.getInventoryGp(), cashTracker.getBankGp(), cashTracker.isBankSeen());
 			revalueNetWorthAndPublish();
 			queueLocalSync();

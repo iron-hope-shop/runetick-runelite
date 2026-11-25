@@ -35,8 +35,8 @@ public interface RuneTickConfig extends Config
 
 	@ConfigItem(
 		keyName = "syncHistory",
-		name = "Sync GE history & cash",
-		description = "Upload GE history, live GE slots, cash, and net worth to the Runetick website",
+		name = "Sync with the website",
+		description = "Upload Grand Exchange history and live slots to the Runetick website. Gold and net worth go only if Send wealth to the website is also on",
 		position = 3
 	)
 	default boolean syncHistory()
@@ -204,11 +204,33 @@ public interface RuneTickConfig extends Config
 
 	@ConfigItem(
 		keyName = "showNetWorth",
-		name = "Show net worth",
-		description = "Estimate net worth from cash + GE prices of inventory/bank items + open GE offers (open bank once for full total). Shows session delta",
+		name = "Track wealth",
+		description = "Add up gold, the bag, worn gear, the bank and open offers at Grand Exchange prices, and show what you gained this session. Turn off to stop tracking wealth at all",
 		position = 15
 	)
 	default boolean showNetWorth()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "countBank",
+		name = "Count the bank",
+		description = "Include bank gold and bank items in wealth and in anything sent to the website. Bank view and bank hits still read the bank on this computer if they are on",
+		position = 15
+	)
+	default boolean countBank()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "sendWealth",
+		name = "Send wealth to the website",
+		description = "Send gold and net worth with each sync. Turn off to keep wealth on this computer; trades and live slots still sync",
+		position = 15
+	)
+	default boolean sendWealth()
 	{
 		return true;
 	}

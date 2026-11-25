@@ -5,12 +5,13 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 
 /**
- * Mark-to-market value of open / collectable GE offers.
+ * What open Grand Exchange slots hold that is not yet in the bag or the bank.
  *
- * <p>Buy: unfilled remainder is still your locked cash at the offer price; filled units waiting
- * to collect are items at GE price.
- *
- * <p>Sell: unsold remainder is items at GE price; {@code spent} is coins waiting to collect.
+ * <p>While an offer is still running, the game lets you collect what has filled so far, and the
+ * client cannot tell whether you have. Counting those fills here and again in the bag counted them
+ * twice. So a running offer counts only what is still on the exchange: the coins locked on an
+ * unfilled buy, or the items not yet sold. A finished or cancelled slot holds everything until you
+ * collect it, so it counts all of it.
  */
 final class OfferValue
 {
@@ -61,21 +62,31 @@ final class OfferValue
 			market = Math.max(0, marketPriceOf.applyAsLong(itemId));
 		}
 
-		boolean buy = state == GrandExchangeOfferState.BUYING
-			|| state == GrandExchangeOfferState.BOUGHT
-			|| state == GrandExchangeOfferState.CANCELLED_BUY;
-
-		if (buy)
+		long each = market > 0 ? market : offerPrice;
+		switch (state)
 		{
-			// Locked cash still sitting on the offer + filled items not yet collected.
-			long lockedCash = remain * offerPrice;
-			long itemsWaiting = filled * (market > 0 ? market : offerPrice);
-			return add(lockedCash, itemsWaiting);
+			case BUYING:
+				return mul(remain, offerPrice);
+			case SELLING:
+				return mul(remain, each);
+			case BOUGHT:
+			case CANCELLED_BUY:
+				return add(mul(filled, each), Math.max(0, mul(total, offerPrice) - spent));
+			case SOLD:
+			case CANCELLED_SELL:
+				return add(mul(remain, each), spent);
+			default:
+				return 0;
 		}
+	}
 
-		// Sell / cancelled sell: unsold stock + coins from fills waiting to collect.
-		long itemsWaiting = remain * (market > 0 ? market : offerPrice);
-		return add(itemsWaiting, spent);
+	private static long mul(long a, long b)
+	{
+		if (a <= 0 || b <= 0)
+		{
+			return 0;
+		}
+		return a > Long.MAX_VALUE / 4 / b ? Long.MAX_VALUE / 4 : a * b;
 	}
 
 	private static long add(long a, long b)

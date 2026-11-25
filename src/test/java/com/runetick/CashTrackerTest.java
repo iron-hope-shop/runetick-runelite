@@ -44,4 +44,44 @@ public class CashTrackerTest
 		tracker.refreshInventory();
 		assertEquals(1_000L, tracker.getInventoryGp());
 	}
+
+	@Test
+	public void leavingTheBankOutKeepsBankGoldOutOfTheTotalAndStopsReadingIt()
+	{
+		Client client = mock(Client.class);
+		CashStore store = mock(CashStore.class);
+		CashStore.Snapshot snap = new CashStore.Snapshot();
+		snap.setInventoryGp(1_000);
+		snap.setBankGp(50_000_000);
+		snap.setBankSeen(true);
+		when(store.load()).thenReturn(snap);
+		CashTracker tracker = new CashTracker(client, store);
+		assertEquals(50_001_000L, tracker.getTotalKnownGp());
+		tracker.setCountBank(false);
+		assertEquals(1_000L, tracker.getTotalKnownGp());
+		ItemContainer bank = mock(ItemContainer.class);
+		when(bank.count(995)).thenReturn(9);
+		when(client.getItemContainer(InventoryID.BANK)).thenReturn(bank);
+		tracker.refreshBank();
+		assertEquals(50_000_000L, tracker.getBankGp());
+	}
+
+	@Test
+	public void anotherCharacterStartsFromItsOwnCash()
+	{
+		Client client = mock(Client.class);
+		CashStore store = mock(CashStore.class);
+		CashStore.Snapshot main = new CashStore.Snapshot();
+		main.setBankGp(80_000_000);
+		main.setBankSeen(true);
+		when(store.load()).thenReturn(main);
+		CashTracker tracker = new CashTracker(client, store);
+		assertEquals(true, tracker.useAccount(111L));
+		assertEquals(false, tracker.useAccount(111L));
+		when(store.load()).thenReturn(null);
+		assertEquals(true, tracker.useAccount(222L));
+		assertEquals(0L, tracker.getBankGp());
+		assertEquals(false, tracker.isBankSeen());
+		org.mockito.Mockito.verify(store).useAccount(222L);
+	}
 }

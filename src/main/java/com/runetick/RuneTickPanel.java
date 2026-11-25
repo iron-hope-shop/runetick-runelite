@@ -618,7 +618,11 @@ public class RuneTickPanel extends PluginPanel
 				{
 					meta.append(" · open bank once");
 				}
-				meta.append(" · items ").append(PriceFormat.gpCompact(worth.invItemsGp + (worth.bankItemsSeen ? worth.bankItemsGp : 0)));
+				meta.append(" · items ").append(PriceFormat.gpCompact(worth.invItemsGp + worth.wornGp + (worth.bankItemsSeen ? worth.bankItemsGp : 0)));
+				if (!worth.bankCounted)
+				{
+					meta.append(" · bank left out");
+				}
 				meta.append(" · offers ").append(PriceFormat.gpCompact(worth.offersGp));
 				kpiMeta.setText(wrap(meta.toString()));
 			}
