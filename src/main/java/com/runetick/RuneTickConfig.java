@@ -90,13 +90,24 @@ public interface RuneTickConfig extends Config
 
 	@ConfigItem(
 		keyName = "openItemOnSite",
-		name = "Right-click -> site",
-		description = "Add a Runetick option on item right-click (inventory/bank/GE) and open board rows on click",
+		name = "Right-click menu",
+		description = "Add a Runetick option when you right-click an item in your bag, bank or GE: details, price check, sell value, watch",
 		position = 7
 	)
 	default boolean openItemOnSite()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "menuNeedsShift",
+		name = "Only with Shift held",
+		description = "Show the Runetick right-click option only while you hold Shift",
+		position = 7
+	)
+	default boolean menuNeedsShift()
+	{
+		return false;
 	}
 
 	@ConfigItem(

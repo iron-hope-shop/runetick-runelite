@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.27] - 2026-11-25
+### Added
+- Right-click any item in your bag, bank or Grand Exchange for a Runetick menu:
+  - **Details** opens the item in the sidebar.
+  - **Price check** prints buy, sell, profit after tax and the odds of filling in your chat.
+  - **Sell value** says what your whole stack sells for after tax, and whether high alching pays more.
+  - **What now?** on a GE slot explains its mark (hold, reprice or pull) and the price to move to.
+  - **Watch** and **Unwatch** add or remove the item from your watchlist.
+  - **Open on site** opens the item's page on the Runetick site.
+- The item page in the sidebar now has a 24-hour price line, how many you hold in your bag and bank and what they sell for, your open offers on it, and Watch, Open on site and Close buttons.
+- "Only with Shift held" setting, to show the Runetick menu only while you hold Shift.
+
+### Fixed
+- The sidebar no longer shows the Wealth heading twice.
+
 ## [0.4.26] - 2026-11-25
 ### Added
 - Profit on GE slots (on by default). Each Grand Exchange slot shows its profit after tax and the time left: a buy if it all sold at today's price, a sell against what history says you paid. The line under the Grand Exchange window adds up all open offers.

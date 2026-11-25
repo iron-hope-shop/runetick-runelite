@@ -335,6 +335,31 @@ public class RuneTickApi
 		send("POST", "v1/me/lists/default/items", body, true);
 	}
 
+	public void removeFromList(String listId, int itemId) throws IOException
+	{
+		String list = listId == null || listId.isEmpty() ? "default" : listId;
+		send("DELETE", "v1/me/lists/" + list.replaceAll("[^A-Za-z0-9_-]", "") + "/items/" + itemId, null, true);
+	}
+
+	public List<Long> getSpark(int itemId) throws IOException
+	{
+		String body = send("GET", "v1/items/" + itemId + "/history?lookback=24h", null, false);
+		try
+		{
+			Spark spark = gson.fromJson(body, Spark.class);
+			return spark == null || spark.spark == null ? Collections.emptyList() : spark.spark;
+		}
+		catch (JsonParseException e)
+		{
+			throw new IOException("Unreadable history from Runetick", e);
+		}
+	}
+
+	private static class Spark
+	{
+		private List<Long> spark;
+	}
+
 	public Me getMe() throws IOException
 	{
 		String body = send("GET", "v1/me", null, true);

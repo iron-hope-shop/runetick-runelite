@@ -27,7 +27,11 @@ import net.runelite.api.ItemContainer;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.VarPlayer;
+import net.runelite.api.KeyCode;
+import net.runelite.api.Menu;
 import net.runelite.api.MenuAction;
+import net.runelite.api.MenuEntry;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -37,6 +41,8 @@ import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.eventbus.Subscribe;
@@ -75,6 +81,7 @@ public class RuneTickPlugin extends Plugin
 	private final Map<Integer, String> itemNames = new ConcurrentHashMap<>();
 	/** One Runetick menu line per right-click. */
 	private boolean runetickMenuAdded;
+	private final Map<Integer, List<String>> watched = new ConcurrentHashMap<>();
 	private final AtomicReference<Long> nextSyncAllowedAt = new AtomicReference<>(0L);
 	private final AtomicBoolean syncCoalesce = new AtomicBoolean(false);
 	private ScheduledFuture<?> syncDebounceTask;
@@ -90,6 +97,9 @@ public class RuneTickPlugin extends Plugin
 
 	@Inject
 	private ItemManager itemManager;
+
+	@Inject
+	private ChatMessageManager chatMessageManager;
 
 	@Inject
 	private ClientThread clientThread;
@@ -624,16 +634,30 @@ public class RuneTickPlugin extends Plugin
 			{
 				RuneTickApi.Me me = api.getMe();
 				List<Integer> ids = new ArrayList<>();
+				Map<Integer, List<String>> where = new HashMap<>();
 				if (me.getLists() != null)
 				{
 					for (RuneTickApi.WatchList list : me.getLists())
 					{
 						if (list != null && list.getItemIds() != null)
 						{
-							ids.addAll(list.getItemIds());
+							for (Integer id : list.getItemIds())
+							{
+								if (id == null)
+								{
+									continue;
+								}
+								if (!where.containsKey(id))
+								{
+									ids.add(id);
+								}
+								where.computeIfAbsent(id, k -> new ArrayList<>()).add(list.getId());
+							}
 						}
 					}
 				}
+				watched.clear();
+				watched.putAll(where);
 				List<BoardLine> lines = new ArrayList<>();
 				for (Integer id : ids)
 				{
@@ -673,6 +697,7 @@ public class RuneTickPlugin extends Plugin
 			try
 			{
 				api.addToWatchlist(itemId);
+				watched.computeIfAbsent(itemId, k -> new ArrayList<>()).add("default");
 				loadWatch();
 				SwingUtilities.invokeLater(() -> panel.showMessage("Added to your watchlist"));
 			}
@@ -707,7 +732,24 @@ public class RuneTickPlugin extends Plugin
 				{
 					rememberPrice(itemId, quote.getBuy(), quote.getSell());
 				}
-				SwingUtilities.invokeLater(() -> panel.showItem(quote, paidEach));
+				List<Long> spark;
+				try
+				{
+					spark = api.getSpark(itemId);
+				}
+				catch (IOException e)
+				{
+					spark = Collections.emptyList();
+				}
+				Integer bag = inventoryHoldings.snapshot().get(itemId);
+				RuneTickPanel.ItemExtras extras = new RuneTickPanel.ItemExtras(
+					spark, bag == null ? 0 : bag, bankHoldings.qty(itemId), bankHoldings.isSeen(), offersFor(itemId),
+					state.isLinked() ? isWatched(itemId) : null, () -> toggleWatch(itemId));
+				if (gen != inspectGen.get())
+				{
+					return;
+				}
+				SwingUtilities.invokeLater(() -> panel.showItem(quote, paidEach, extras));
 			}
 			catch (Throwable t)
 			{
@@ -716,6 +758,216 @@ public class RuneTickPlugin extends Plugin
 				{
 					SwingUtilities.invokeLater(() -> panel.showItem(null));
 				}
+			}
+		});
+	}
+
+	private List<String> offersFor(int itemId)
+	{
+		List<String> out = new ArrayList<>();
+		try
+		{
+			GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+			if (offers == null)
+			{
+				return out;
+			}
+			for (GrandExchangeOffer o : offers)
+			{
+				if (o == null || o.getItemId() != itemId || o.getState() == GrandExchangeOfferState.EMPTY)
+				{
+					continue;
+				}
+				boolean buy = o.getState() == GrandExchangeOfferState.BUYING || o.getState() == GrandExchangeOfferState.BOUGHT
+					|| o.getState() == GrandExchangeOfferState.CANCELLED_BUY;
+				out.add((buy ? "Buy " : "Sell ") + PriceFormat.gp(o.getQuantitySold()) + "/" + PriceFormat.gp(o.getTotalQuantity())
+					+ " @ " + PriceFormat.gp(o.getPrice()));
+			}
+		}
+		catch (Throwable t)
+		{
+			return out;
+		}
+		return out;
+	}
+
+	private void unwatchItem(int itemId)
+	{
+		if (!state.isLinked())
+		{
+			return;
+		}
+		executor.submit(() ->
+		{
+			try
+			{
+				List<String> lists = watched.get(itemId);
+				for (String list : lists == null || lists.isEmpty() ? Collections.singletonList("default") : new ArrayList<>(lists))
+				{
+					api.removeFromList(list, itemId);
+				}
+				watched.remove(itemId);
+				loadWatch();
+				SwingUtilities.invokeLater(() -> panel.showMessage("Removed from your watchlist"));
+			}
+			catch (Throwable t)
+			{
+				log.error("Could not unwatch item " + itemId, t);
+				SwingUtilities.invokeLater(() -> panel.showMessage("Could not remove that watch"));
+			}
+		});
+	}
+
+	boolean isWatched(int itemId)
+	{
+		return watched.containsKey(itemId);
+	}
+
+	void toggleWatch(int itemId)
+	{
+		if (isWatched(itemId))
+		{
+			unwatchItem(itemId);
+		}
+		else
+		{
+			watchItem(itemId);
+		}
+	}
+
+	private int canonical(int itemId)
+	{
+		try
+		{
+			int id = itemManager.canonicalize(itemId);
+			return id > 0 ? id : itemId;
+		}
+		catch (Throwable t)
+		{
+			return itemId;
+		}
+	}
+
+	private static void addSub(Menu menu, String option, Runnable action)
+	{
+		menu.createMenuEntry(-1)
+			.setOption(option)
+			.setType(MenuAction.RUNELITE)
+			.onClick(e -> action.run());
+	}
+
+	private void showDetails(int itemId)
+	{
+		clientToolbar.openPanel(navButton);
+		inspectItem(itemId);
+	}
+
+	private void chat(String text)
+	{
+		String safe = text.replace("<", "").replace(">", "");
+		chatMessageManager.queue(QueuedMessage.builder()
+			.type(ChatMessageType.GAMEMESSAGE)
+			.runeLiteFormattedMessage("<col=22c55e>Runetick</col> " + safe)
+			.build());
+	}
+
+	private RuneTickApi.ItemQuote freshQuote(int itemId) throws IOException
+	{
+		RuneTickApi.ItemQuote quote = api.getItem(itemId);
+		if (quote != null)
+		{
+			rememberPrice(itemId, quote.getBuy(), quote.getSell());
+		}
+		return quote;
+	}
+
+	private void priceCheck(int itemId)
+	{
+		String name = itemName(itemId);
+		executor.submit(() ->
+		{
+			try
+			{
+				RuneTickApi.ItemQuote quote = freshQuote(itemId);
+				chat(MenuCopy.priceCheck(quote != null && quote.getName() != null ? quote.getName() : name, quote));
+			}
+			catch (Throwable t)
+			{
+				log.error("Price check failed", t);
+				chat("Could not reach Runetick for a price.");
+			}
+		});
+	}
+
+	private long heldQty(int itemId)
+	{
+		Integer bag = inventoryHoldings.snapshot().get(itemId);
+		return (bag == null ? 0 : bag) + (long) bankHoldings.qty(itemId);
+	}
+
+	private void sellValue(int itemId)
+	{
+		String name = itemName(itemId);
+		long qty = heldQty(itemId);
+		boolean bankSeen = bankHoldings.isSeen();
+		executor.submit(() ->
+		{
+			try
+			{
+				RuneTickApi.ItemQuote quote = freshQuote(itemId);
+				String line = MenuCopy.sellValue(quote != null && quote.getName() != null ? quote.getName() : name, qty, quote);
+				chat(bankSeen ? line : line + " Open your bank once to count it too.");
+			}
+			catch (Throwable t)
+			{
+				log.error("Sell value failed", t);
+				chat("Could not reach Runetick for a price.");
+			}
+		});
+	}
+
+	private void slotCall(int slot)
+	{
+		GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null || slot < 0 || slot >= offers.length || offers[slot] == null
+			|| offers[slot].getState() == GrandExchangeOfferState.EMPTY)
+		{
+			return;
+		}
+		GrandExchangeOffer offer = offers[slot];
+		GrandExchangeOfferState st = offer.getState();
+		boolean buy = st == GrandExchangeOfferState.BUYING || st == GrandExchangeOfferState.BOUGHT
+			|| st == GrandExchangeOfferState.CANCELLED_BUY;
+		boolean done = st == GrandExchangeOfferState.BOUGHT || st == GrandExchangeOfferState.SOLD;
+		int itemId = offer.getItemId();
+		long price = offer.getPrice();
+		int filled = offer.getQuantitySold();
+		int total = offer.getTotalQuantity();
+		String name = itemName(itemId);
+		int pct = config.offerAlertPercent() < 1 ? 2 : config.offerAlertPercent();
+		long floor = config.offerMarginFloor();
+		executor.submit(() ->
+		{
+			try
+			{
+				if (done)
+				{
+					chat(name + ": " + (buy ? "bought" : "sold") + " " + PriceFormat.gp(filled) + ". Collect it.");
+					return;
+				}
+				RuneTickApi.ItemQuote quote = offerGuard.quoteOf(itemId);
+				if (quote == null)
+				{
+					quote = freshQuote(itemId);
+				}
+				OfferAlert.Kind kind = quote == null ? OfferAlert.Kind.NONE : OfferAlert.classify(
+					buy, price, quote.getBuy(), quote.getSell(), quote.getAfterTaxSell(), 0, pct, floor);
+				chat(MenuCopy.slotCall(name, buy, price, filled, total, quote, kind));
+			}
+			catch (Throwable t)
+			{
+				log.error("Slot call failed", t);
+				chat("Could not reach Runetick for a price.");
 			}
 		});
 	}
@@ -1422,22 +1674,41 @@ public class RuneTickPlugin extends Plugin
 			{
 				return;
 			}
-			final int id = itemId;
+			if (config.menuNeedsShift() && !client.isKeyPressed(KeyCode.KC_SHIFT))
+			{
+				return;
+			}
+			final int id = canonical(itemId);
+			final int slot = "View offer".equals(option) ? GeView.slotFromMenu(client, event.getActionParam1()) : -1;
 			runetickMenuAdded = true;
-			client.createMenuEntry(-1)
+			MenuEntry top = client.createMenuEntry(-1)
 				.setOption("<col=22c55e>Runetick</col>")
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
-				.onClick(e ->
+				.onClick(e -> showDetails(id));
+			Menu sub = top.createSubMenu();
+			addSub(sub, "Details", () -> showDetails(id));
+			addSub(sub, "Price check", () -> priceCheck(id));
+			if (slot >= 0)
+			{
+				addSub(sub, "What now?", () -> slotCall(slot));
+			}
+			else
+			{
+				addSub(sub, "Sell value", () -> sellValue(id));
+			}
+			if (state.isLinked())
+			{
+				if (isWatched(id))
 				{
-					clientToolbar.openPanel(navButton);
-					inspectItem(id);
-				});
-			client.createMenuEntry(-1)
-				.setOption("<col=22c55e>Watch</col>")
-				.setTarget(event.getTarget())
-				.setType(MenuAction.RUNELITE)
-				.onClick(e -> watchItem(id));
+					addSub(sub, "Unwatch", () -> unwatchItem(id));
+				}
+				else
+				{
+					addSub(sub, "Watch", () -> watchItem(id));
+				}
+			}
+			addSub(sub, "Open on site", () -> openItemOnSite(id));
 		}
 		catch (Throwable t)
 		{

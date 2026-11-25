@@ -715,11 +715,38 @@ public class RuneTickPanel extends PluginPanel
 		showItem(quote, null);
 	}
 
+	static final class ItemExtras
+	{
+		final List<Long> spark;
+		final long bag;
+		final long bank;
+		final boolean bankSeen;
+		final List<String> offers;
+		final Boolean watched;
+		final Runnable toggleWatch;
+
+		ItemExtras(List<Long> spark, long bag, long bank, boolean bankSeen, List<String> offers, Boolean watched, Runnable toggleWatch)
+		{
+			this.spark = spark == null ? java.util.Collections.emptyList() : spark;
+			this.bag = bag;
+			this.bank = bank;
+			this.bankSeen = bankSeen;
+			this.offers = offers == null ? java.util.Collections.emptyList() : offers;
+			this.watched = watched;
+			this.toggleWatch = toggleWatch;
+		}
+	}
+
 	void showItem(RuneTickApi.ItemQuote quote, Long paidEach)
+	{
+		showItem(quote, paidEach, null);
+	}
+
+	void showItem(RuneTickApi.ItemQuote quote, Long paidEach, ItemExtras extras)
 	{
 		itemHost.removeAll();
 		itemHost.setVisible(true);
-		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote, paidEach));
+		itemHost.add(quote == null ? note("No quote for that item.") : itemCard(quote, paidEach, extras));
 		itemHost.revalidate();
 		itemHost.repaint();
 		reflowHosts();
@@ -856,7 +883,7 @@ public class RuneTickPanel extends PluginPanel
 		return card;
 	}
 
-	private JPanel itemCard(RuneTickApi.ItemQuote quote, Long paidEach)
+	private JPanel itemCard(RuneTickApi.ItemQuote quote, Long paidEach, ItemExtras extras)
 	{
 		int w = columnWidth();
 		JPanel card = new JPanel(new BorderLayout(6, 0));
@@ -875,6 +902,26 @@ public class RuneTickPanel extends PluginPanel
 		nameLbl.setText(wrap(name));
 		fitWrapped(nameLbl);
 		text.add(nameLbl);
+		if (extras != null && extras.spark.size() >= 2)
+		{
+			text.add(Box.createVerticalStrut(3));
+			text.add(new Spark(extras.spark, w - 54, 30));
+			long lo = Long.MAX_VALUE;
+			long hi = 0;
+			for (Long v : extras.spark)
+			{
+				if (v != null && v > 0)
+				{
+					lo = Math.min(lo, v);
+					hi = Math.max(hi, v);
+				}
+			}
+			if (hi > 0)
+			{
+				text.add(line("24h", PriceFormat.gp(lo) + " to " + PriceFormat.gp(hi), MUTED));
+			}
+			text.add(Box.createVerticalStrut(3));
+		}
 		long cost = paidEach != null && paidEach > 0 ? paidEach : quote.getBuy();
 		if (paidEach != null && paidEach > 0)
 		{
@@ -949,19 +996,160 @@ public class RuneTickPanel extends PluginPanel
 		{
 			text.add(line("Volume", PriceFormat.gp(quote.getVolume()) + " / 5m", INK));
 		}
+		if (analytics != null && analytics.getMarket() != null && analytics.getMarket().getHint() != null
+			&& !analytics.getMarket().getHint().isEmpty())
+		{
+			text.add(line("Market", analytics.getMarket().getHint(), MUTED));
+		}
+		if (analytics != null && analytics.getAnomaly() != null && analytics.getAnomaly().getHint() != null
+			&& !analytics.getAnomaly().getHint().isEmpty())
+		{
+			text.add(line("Watch out", analytics.getAnomaly().getHint(), LOSS));
+		}
+		if (extras != null)
+		{
+			long held = extras.bag + extras.bank;
+			if (held > 0 || !extras.offers.isEmpty() || !extras.bankSeen)
+			{
+				text.add(Box.createVerticalStrut(4));
+				JLabel yours = plain(FontManager.getRunescapeSmallFont(), Accent.color());
+				yours.setText("YOURS");
+				text.add(yours);
+			}
+			if (held > 0)
+			{
+				text.add(line("You have", PriceFormat.gp(held) + " (bag " + PriceFormat.gp(extras.bag) + " · bank " + PriceFormat.gp(extras.bank) + ")", INK));
+				long keepEach = quote.getAfterTaxSell() > 0 ? quote.getAfterTaxSell() : BankView.afterTax(quote.getSell());
+				if (keepEach > 0)
+				{
+					text.add(line("Sells for", BankView.compact(keepEach * held) + " after tax", GAIN));
+				}
+				if (paidEach != null && paidEach > 0 && keepEach > 0)
+				{
+					long gain = (keepEach - paidEach) * held;
+					text.add(line("Vs paid", (gain > 0 ? "+" : "") + BankView.compact(gain), gain >= 0 ? GAIN : LOSS));
+				}
+			}
+			for (String offer : extras.offers)
+			{
+				text.add(line("On the GE", offer, INK));
+			}
+			if (!extras.bankSeen)
+			{
+				text.add(line("", "Open your bank once to count it", MUTED));
+			}
+		}
+		JPanel buttons = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
+		buttons.setOpaque(false);
+		buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
+		if (extras != null && extras.watched != null && extras.toggleWatch != null)
+		{
+			JButton watch = new JButton(extras.watched ? "Unwatch" : "Watch");
+			flat(watch);
+			watch.addActionListener(e ->
+			{
+				extras.toggleWatch.run();
+				watch.setText("Watch".equals(watch.getText()) ? "Unwatch" : "Watch");
+			});
+			buttons.add(watch);
+		}
 		JButton open = new JButton("Open on site");
 		flat(open);
-		open.setAlignmentX(Component.LEFT_ALIGNMENT);
-		open.setMaximumSize(new Dimension(w, 24));
 		open.addActionListener(e -> openItem(quote.getId()));
-		text.add(Box.createVerticalStrut(4));
-		text.add(open);
+		buttons.add(open);
+		JButton close = new JButton("Close");
+		flat(close);
+		close.addActionListener(e ->
+		{
+			clearItem();
+			reflowHosts();
+		});
+		buttons.add(close);
+		int rows = (buttons.getComponentCount() + 1) / 2;
+		buttons.setMaximumSize(new Dimension(w, rows * 28));
+		text.add(Box.createVerticalStrut(6));
+		text.add(buttons);
 		card.add(text, BorderLayout.CENTER);
 
 		int h = Math.max(88, text.getPreferredSize().height + 16);
 		card.setMaximumSize(new Dimension(w, h));
 		card.setPreferredSize(new Dimension(w, h));
 		return card;
+	}
+
+	private static final class Spark extends javax.swing.JComponent
+	{
+		private final List<Long> points;
+
+		Spark(List<Long> points, int width, int height)
+		{
+			this.points = points;
+			Dimension d = new Dimension(Math.max(40, width), height);
+			setPreferredSize(d);
+			setMaximumSize(d);
+			setAlignmentX(Component.LEFT_ALIGNMENT);
+		}
+
+		@Override
+		protected void paintComponent(java.awt.Graphics g)
+		{
+			long lo = Long.MAX_VALUE;
+			long hi = Long.MIN_VALUE;
+			int n = 0;
+			for (Long v : points)
+			{
+				if (v != null && v > 0)
+				{
+					lo = Math.min(lo, v);
+					hi = Math.max(hi, v);
+					n++;
+				}
+			}
+			if (n < 2)
+			{
+				return;
+			}
+			java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+			g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+			int wd = getWidth() - 2;
+			int ht = getHeight() - 4;
+			double span = Math.max(1, hi - lo);
+			java.awt.geom.Path2D.Double path = new java.awt.geom.Path2D.Double();
+			int i = 0;
+			long last = lo;
+			for (Long v : points)
+			{
+				if (v == null || v <= 0)
+				{
+					continue;
+				}
+				double x = 1 + wd * (double) i / (n - 1);
+				double y = 2 + ht - ht * (v - lo) / span;
+				if (i == 0)
+				{
+					path.moveTo(x, y);
+				}
+				else
+				{
+					path.lineTo(x, y);
+				}
+				last = v;
+				i++;
+			}
+			long first = lo;
+			for (Long v : points)
+			{
+				if (v != null && v > 0)
+				{
+					first = v;
+					break;
+				}
+			}
+			g2.setColor(last >= first ? GAIN : LOSS);
+			g2.setStroke(new java.awt.BasicStroke(1.5f));
+			g2.draw(path);
+			g2.dispose();
+		}
 	}
 
 	private static String signedQty(long each, int qty)
