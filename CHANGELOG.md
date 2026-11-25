@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.26] - 2026-11-25
+### Added
+- Profit on GE slots (on by default). Each Grand Exchange slot shows its profit after tax and the time left: a buy if it all sold at today's price, a sell against what history says you paid. The line under the Grand Exchange window adds up all open offers.
+
 ## [0.4.25] - 2026-11-25
 ### Fixed
 - Wealth no longer counts Grand Exchange fills twice. A running offer counts only what is still on the exchange: coins locked on an unfilled buy, or items not yet sold. A finished or cancelled slot counts everything it holds, including the coins refunded on a buy that filled below its price.

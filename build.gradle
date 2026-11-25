@@ -33,7 +33,7 @@ dependencies {
 }
 
 group = 'com.runetick'
-version = '0.4.25'
+version = '0.4.26'
 
 processResources {
 	from('runelite-plugin.properties')

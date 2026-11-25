@@ -18,8 +18,8 @@ import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 
 /**
- * A small mark on the item icon in each GE slot.
- * One mark per slot: check hold, plus-minus reprice, cross pull.
+ * A small mark on the item icon in each GE slot: check hold, plus-minus reprice, cross pull.
+ * Under it, the estimated profit after tax and the time left, and a total under the window.
  */
 public class GeSlotOverlay extends Overlay
 {
@@ -33,13 +33,17 @@ public class GeSlotOverlay extends Overlay
 	private final Client client;
 	private final RuneTickConfig config;
 	private final OfferGuard offerGuard;
+	private final GeHistory geHistory;
+	private long totalGp;
+	private int totalSlots;
 
 	@Inject
-	public GeSlotOverlay(Client client, RuneTickConfig config, OfferGuard offerGuard)
+	public GeSlotOverlay(Client client, RuneTickConfig config, OfferGuard offerGuard, GeHistory geHistory)
 	{
 		this.client = client;
 		this.config = config;
 		this.offerGuard = offerGuard;
+		this.geHistory = geHistory;
 		setPosition(OverlayPosition.DYNAMIC);
 		setLayer(OverlayLayer.ABOVE_WIDGETS);
 	}
@@ -58,6 +62,8 @@ public class GeSlotOverlay extends Overlay
 			{
 				return null;
 			}
+			totalGp = 0;
+			totalSlots = 0;
 			for (int slot = 0; slot < offers.length && slot < 8; slot++)
 			{
 				drawSlot(graphics, slot, offers[slot]);
@@ -124,6 +130,57 @@ public class GeSlotOverlay extends Overlay
 		int tx = x + (badge - fm.stringWidth(glyph)) / 2;
 		int ty = y + (badge + fm.getAscent() - fm.getDescent()) / 2 + 1;
 		graphics.drawString(glyph, tx, ty);
+
+		if (config.showSlotProfit())
+		{
+			drawProfit(graphics, slotBounds, offer, buy, quote);
+		}
+	}
+
+	private SlotProfit estimate(GrandExchangeOffer offer, boolean buy, RuneTickApi.ItemQuote quote)
+	{
+		int total = Math.max(0, offer.getTotalQuantity());
+		if (buy)
+		{
+			return quote == null ? null : SlotProfit.forBuy(total, offer.getPrice(), quote.getAfterTaxSell());
+		}
+		CostBasis.Open paid = CostBasis.openBuys(geHistory.all(), offer.getItemId());
+		return paid == null ? null : SlotProfit.forSell(total, offer.getPrice(), paid.each);
+	}
+
+	private void drawProfit(Graphics2D graphics, Rectangle slot, GrandExchangeOffer offer, boolean buy, RuneTickApi.ItemQuote quote)
+	{
+		SlotProfit est = estimate(offer, buy, quote);
+		int remaining = Math.max(0, offer.getTotalQuantity() - offer.getQuantitySold());
+		boolean live = offer.getState() == GrandExchangeOfferState.BUYING || offer.getState() == GrandExchangeOfferState.SELLING;
+		String eta = live && remaining > 0 ? offerGuard.etaFor(offer.getItemId(), remaining, buy, offer.getPrice()) : "";
+		if (est == null && (eta == null || eta.isEmpty()))
+		{
+			return;
+		}
+		if (est != null)
+		{
+			totalGp += est.gp;
+			totalSlots++;
+		}
+		String money = est == null ? "" : est.text();
+		String rest = eta == null || eta.isEmpty() ? "" : (money.isEmpty() ? eta : " \u00b7 " + eta);
+		graphics.setFont(LEGEND);
+		FontMetrics fm = graphics.getFontMetrics();
+		int width = fm.stringWidth(money + rest) + 8;
+		int height = fm.getHeight() + 2;
+		int x = slot.x + 3;
+		int y = slot.y + 3;
+		graphics.setColor(PLATE);
+		graphics.fillRoundRect(x, y, width, height, 6, 6);
+		int baseline = y + fm.getAscent() + 1;
+		if (!money.isEmpty())
+		{
+			graphics.setColor(est.gp < 0 ? PULL : Accent.color());
+			graphics.drawString(money, x + 4, baseline);
+		}
+		graphics.setColor(INK);
+		graphics.drawString(rest, x + 4 + fm.stringWidth(money), baseline);
 	}
 
 	/** One line in the top-right of the Grand Exchange window. */
@@ -159,6 +216,11 @@ public class GeSlotOverlay extends Overlay
 				width += gap;
 			}
 		}
+		if (config.showSlotProfit() && totalSlots > 0)
+		{
+			String sum = "open offers " + (totalGp > 0 ? "+" : totalGp < 0 ? "-" : "") + BankView.compact(Math.abs(totalGp)) + " after tax";
+			width += gap + fm.stringWidth(sum);
+		}
 		int height = fm.getHeight() + 6;
 		int x = bounds.x + 8;
 		int y = bounds.y + bounds.height + 3;
@@ -176,6 +238,19 @@ public class GeSlotOverlay extends Overlay
 			graphics.setColor(colors[i]);
 			graphics.drawString(bit, cursor, baseline);
 			cursor += fm.stringWidth(bit) + gap;
+		}
+		if (config.showSlotProfit() && totalSlots > 0)
+		{
+			String sign = totalGp > 0 ? "+" : totalGp < 0 ? "-" : "";
+			graphics.setColor(INK);
+			graphics.drawString("open offers ", cursor, baseline);
+			cursor += fm.stringWidth("open offers ");
+			graphics.setColor(totalGp < 0 ? PULL : Accent.color());
+			String amount = sign + BankView.compact(Math.abs(totalGp));
+			graphics.drawString(amount, cursor, baseline);
+			cursor += fm.stringWidth(amount);
+			graphics.setColor(INK);
+			graphics.drawString(" after tax", cursor, baseline);
 		}
 	}
 }

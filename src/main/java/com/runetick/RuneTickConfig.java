@@ -67,6 +67,17 @@ public interface RuneTickConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "showSlotProfit",
+		name = "Profit on GE slots",
+		description = "On each Grand Exchange slot, show the profit after tax: for a buy if it sold at today's price, for a sell against what you paid. The total sits under the Grand Exchange window",
+		position = 5
+	)
+	default boolean showSlotProfit()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "showItemHighlights",
 		name = "Tag my items",
 		description = "On items in your open flips, show the price to buy or sell at. On items you bought on the Grand Exchange and still hold, show how much the sell is up or down on what you paid",
