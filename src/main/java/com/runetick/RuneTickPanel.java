@@ -331,7 +331,6 @@ public class RuneTickPanel extends PluginPanel
 		col.add(searchHost);
 		col.add(itemHost);
 		col.add(Box.createVerticalStrut(8));
-		col.add(section("WEALTH"));
 		col.add(wealth);
 		col.add(Box.createVerticalStrut(2));
 		col.add(kpiMeta);
